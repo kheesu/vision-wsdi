@@ -64,7 +64,7 @@ def _lolo_tuned_ari(pl: pd.DataFrame, method: str, lemmas: list[str],
     for h in lemmas:
         best_lam, best_score = lambdas[0], -np.inf
         for lam in lambdas:
-            others = [idx.get((l, method, lam), np.nan) for l in lemmas if l != h]
+            others = [idx.get((other, method, lam), np.nan) for other in lemmas if other != h]
             score = np.nanmean(others) if others else np.nan
             if np.isfinite(score) and score > best_score:
                 best_lam, best_score = lam, score
@@ -128,30 +128,33 @@ def main() -> None:
 
     if visual_lemmas:
         base = pl.set_index(["lemma", "method", "lambda"])["ari_mean"]
-        bert_ari = {l: float(base.get((l, "bert", -1.0), np.nan)) for l in visual_lemmas}
+        subset_of = {lem: pl[pl["lemma"] == lem]["subset"].iloc[0] for lem in visual_lemmas}
+        bert_ari = {lem: float(base.get((lem, "bert", -1.0), np.nan)) for lem in visual_lemmas}
         tuned_img = _lolo_tuned_ari(pl, "bert+image", visual_lemmas, lambdas)
         tuned_lbl = (_lolo_tuned_ari(pl, "bert+label", visual_lemmas, lambdas)
-                     if "bert+label" in fusion_present else {l: np.nan for l in visual_lemmas})
+                     if "bert+label" in fusion_present
+                     else {lem: np.nan for lem in visual_lemmas})
         tuned_shuf = (_lolo_tuned_ari(pl, "bert+shuffled-image", visual_lemmas, lambdas)
-                      if "bert+shuffled-image" in fusion_present else {l: np.nan for l in visual_lemmas})
+                      if "bert+shuffled-image" in fusion_present
+                      else {lem: np.nan for lem in visual_lemmas})
 
-        d_image = np.array([tuned_img[l] - bert_ari[l] for l in visual_lemmas])
-        d_label = np.array([tuned_img[l] - tuned_lbl[l] for l in visual_lemmas])
+        d_image = np.array([tuned_img[lem] - bert_ari[lem] for lem in visual_lemmas])
+        d_label = np.array([tuned_img[lem] - tuned_lbl[lem] for lem in visual_lemmas])
         nrs = int(cfg.evaluation.bootstrap_resamples)
         bootstrap = {
             "delta_image_vs_bert": paired_bootstrap(d_image, nrs, seed=cfg.seed),
             "delta_image_vs_label": paired_bootstrap(d_label, nrs, seed=cfg.seed),
             "per_lemma": {
-                l: {"bert": bert_ari[l], "bert+image": tuned_img[l],
-                    "bert+label": tuned_lbl[l], "bert+shuffled-image": tuned_shuf[l],
-                    "delta_image": float(tuned_img[l] - bert_ari[l]),
-                    "subset": pl[pl["lemma"] == l]["subset"].iloc[0]}
-                for l in visual_lemmas
+                lem: {"bert": bert_ari[lem], "bert+image": tuned_img[lem],
+                      "bert+label": tuned_lbl[lem], "bert+shuffled-image": tuned_shuf[lem],
+                      "delta_image": float(tuned_img[lem] - bert_ari[lem]),
+                      "subset": subset_of[lem]}
+                for lem in visual_lemmas
             },
         }
 
-        multi = [l for l in visual_lemmas
-                 if pl[pl["lemma"] == l]["subset"].iloc[0] == "multi_visual"]
+        multi = [lem for lem in visual_lemmas if subset_of[lem] == "multi_visual"]
+        pos = np.clip(d_image, 0, None)
         summary.update(
             macro_ari_bert=float(np.nanmean(list(bert_ari.values()))),
             macro_ari_bert_image=float(np.nanmean(list(tuned_img.values()))),
@@ -159,15 +162,15 @@ def main() -> None:
             macro_ari_bert_shuffled=float(np.nanmean(list(tuned_shuf.values()))),
             delta_image=float(np.nanmean(d_image)),
             frac_multi_visual_improved=(
-                float(np.mean([tuned_img[l] - bert_ari[l] > 0 for l in multi])) if multi else None),
+                float(np.mean([tuned_img[lem] - bert_ari[lem] > 0 for lem in multi]))
+                if multi else None),
             max_single_lemma_share=(
-                float(np.nanmax(np.clip(d_image, 0, None)) / np.clip(d_image, 0, None).sum())
-                if np.clip(d_image, 0, None).sum() > 0 else None),
+                float(np.nanmax(pos) / pos.sum()) if pos.sum() > 0 else None),
         )
 
     (run / "bootstrap.json").write_text(json.dumps(bootstrap, indent=2), encoding="utf-8")
     (run / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    logger.info("Wrote metrics.csv, per_lemma.csv, macro.csv, bootstrap.json, summary.json to %s", run)
+    logger.info("Wrote metrics/per_lemma/macro/bootstrap/summary to %s", run)
     if visual_lemmas:
         logger.info("macro ARI  bert=%.4f  bert+image=%.4f  bert+label=%.4f",
                     summary["macro_ari_bert"], summary["macro_ari_bert_image"],

@@ -22,7 +22,7 @@ def wnid_to_synset(wnid: str):
 
 def synset_lemmas(synset) -> list[str]:
     """Lower-cased lemma strings of a synset (underscores kept for multiword)."""
-    return [l.name().lower() for l in synset.lemmas()]
+    return [lemma.name().lower() for lemma in synset.lemmas()]
 
 
 @lru_cache(maxsize=1)

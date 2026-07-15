@@ -86,13 +86,18 @@ class ClipTextEmbedder:
 
     @torch.no_grad()
     def encode(self, texts: list[str], batch_size: int = 128) -> np.ndarray:
+        # Compute the projected joint-space embedding explicitly. In
+        # transformers 5.x get_text_features returns the text-encoder output
+        # object (pre-projection), so we apply text_projection ourselves to land
+        # in CLIP's shared image/text space.
         out: list[np.ndarray] = []
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
             enc = self.tokenizer(
                 batch, return_tensors="pt", padding=True, truncation=True, max_length=77
             ).to(self.device)
-            feats = self.model.get_text_features(**enc)
+            pooled = self.model.text_model(**enc).pooler_output
+            feats = self.model.text_projection(pooled)
             feats = feats / feats.norm(p=2, dim=-1, keepdim=True).clamp_min(1e-12)
             out.append(feats.float().cpu().numpy())
         return np.vstack(out)
@@ -130,7 +135,8 @@ class ClipImageEmbedder:
                 continue
             enc = self.processor(images=imgs, return_tensors="pt").to(self.device)
             enc = {k: v.to(self.dtype) if v.is_floating_point() else v for k, v in enc.items()}
-            feats = self.model.get_image_features(**enc)
+            pooled = self.model.vision_model(**enc).pooler_output
+            feats = self.model.visual_projection(pooled)
             feats = feats / feats.norm(p=2, dim=-1, keepdim=True).clamp_min(1e-12)
             out.append(feats.float().cpu().numpy())
         return np.vstack(out) if out else np.empty((0, 512), dtype=np.float32)

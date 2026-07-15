@@ -38,7 +38,9 @@ def _spherical_kmeans(x: np.ndarray, k: int, seed: int, n_init: int) -> np.ndarr
     return km.fit_predict(xn)
 
 
-def _choose_k(x: np.ndarray, k_lo: int, k_hi: int, seed: int, n_init: int) -> tuple[int, np.ndarray]:
+def _choose_k(
+    x: np.ndarray, k_lo: int, k_hi: int, seed: int, n_init: int
+) -> tuple[int, np.ndarray]:
     xn = _l2(x)
     best_k, best_labels, best_score = k_lo, None, -np.inf
     for k in range(k_lo, k_hi + 1):
@@ -105,7 +107,8 @@ def main() -> None:
                     pred = _spherical_kmeans(x, pred_k, seed, n_init)
                 else:
                     if k_hi < k_lo:  # too few occurrences to search
-                        pred_k, pred = min(gold_k, n), _spherical_kmeans(x, min(gold_k, n), seed, n_init)
+                        pred_k = min(gold_k, n)
+                        pred = _spherical_kmeans(x, pred_k, seed, n_init)
                     else:
                         pred_k, pred = _choose_k(x, k_lo, k_hi, seed, n_init)
                 rows.append(
