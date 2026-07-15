@@ -1,0 +1,35 @@
+[project]
+name = "vision-lsi"
+version = "0.1.0"
+description = "Do ImageNet-derived visual anchors improve unsupervised clustering of contextual word senses?"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "transformers>=4.44",
+  "tokenizers",
+  "nltk>=3.9",
+  "numpy",
+  "scipy",
+  "pandas",
+  "pyarrow",
+  "scikit-learn>=1.4",
+  "pillow",
+  "tqdm",
+  "pyyaml",
+  "matplotlib",
+  # torch/torchvision are intentionally NOT pinned here. Install a CUDA build
+  # matching the box (see README) before running the image/embedding stages.
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "ruff>=0.4"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff]
+line-length = 100

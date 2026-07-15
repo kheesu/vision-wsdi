@@ -1,0 +1,14 @@
+# Non-torch dependencies. Install torch/torchvision separately with a CUDA build
+# that matches the box (RTX PRO 6000 / Blackwell needs a recent wheel). See README.
+transformers>=4.44
+tokenizers
+nltk>=3.9
+numpy
+scipy
+pandas
+pyarrow
+scikit-learn>=1.4
+pillow
+tqdm
+pyyaml
+matplotlib

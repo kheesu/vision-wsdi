@@ -1,0 +1,50 @@
+# Pilot configuration for the vision-anchored lexical-sense-induction experiment.
+#
+# ${VAR} tokens are expanded from the environment at load time (see
+# src/pilotlib/config.py). IMAGENET_ROOT is the only one that must be set; if it
+# is unset or the directory is missing, the image-dependent systems are skipped
+# and the text-only pipeline still runs end-to-end.
+seed: 13
+
+data:
+  imagenet_root: ${IMAGENET_ROOT}
+  min_occurrences: 40          # keep lemmas with >= this many annotated occurrences
+  min_senses: 2                # keep lemmas with >= this many observed gold senses
+  min_occurrences_per_sense: 8 # keep only senses with >= this many examples
+  pos: noun                    # restrict the pilot to nouns
+
+models:
+  contextual: bert-base-uncased
+  vision_language: openai/clip-vit-base-patch32
+
+images:
+  samples_per_class: 32        # M — images averaged into each class prototype
+  sampling_seed: 13
+  batch_size: 128
+  use_fp16: true               # set false automatically when CUDA is unavailable
+
+contexts:
+  words_left: 20               # local window fed to the CLIP text encoder
+  words_right: 20
+  bert_batch_size: 32
+  clip_batch_size: 128
+  pca_dimensions: 64           # PCA_64 over all retained BERT occurrence vectors
+  clip_template: 'The word "{target}" is used in this context: {context}'
+  # A second CLIP encoding using the bare local window, retained as an ablation.
+  clip_raw_ablation: true
+
+fusion:
+  lambdas: [0.1, 0.25, 0.5, 1.0, 2.0]
+
+clustering:
+  method: spherical_kmeans
+  n_init: 20
+  seeds: [13, 17, 19, 23, 29, 31, 37, 41, 43, 47]
+  oracle_k: true               # controlled representation test uses gold K
+  # Unknown-K search range is min(k_max, floor(n_w / k_denom)).
+  unknown_k_min: 2
+  unknown_k_max: 6
+  unknown_k_denom: 5
+
+evaluation:
+  bootstrap_resamples: 10000
