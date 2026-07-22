@@ -14,8 +14,9 @@ this result is positive.
 
 ## Corpora
 
-The gold sense labels come from one of two interchangeable corpora, selected by
-`data.corpus` (or `CORPUS=` on `run.sh`/`make`):
+The gold sense labels come from one of four interchangeable, English corpora,
+selected by `CORPUS=` on `run.sh`/`make` (each has a `make <name>-fetch` target
+and honours a `*_ROOT` env var):
 
 - **`semcor`** (default) — WordNet-annotated senses. Inventory-*dependent*: the
   gold senses are a predefined synset inventory.
@@ -26,11 +27,19 @@ The gold sense labels come from one of two interchangeable corpora, selected by
   **pooled** (sense induction, not change detection); DWUG's `-1` noise cluster
   is dropped and its singleton clusters are pruned by
   `data.min_occurrences_per_sense`, exactly as rare WordNet senses are pruned.
-  Only DWUG EN is wired in — the visual-anchor lookup still routes through
-  WordNet, so non-English DWUGs would need a different anchor bridge.
+- **`semeval2013`** — [SemEval-2013 Task 13](https://doi.org/10.5281/zenodo.5638384)
+  (WSI for graded senses). Gold = WordNet-3.1 sense keys. Instances are *graded*
+  (multiple weighted senses); for hard clustering the **single-sense** subset is
+  used by default (graded instances dropped, `--include-graded` to keep them via
+  their max-weight sense).
+- **`semeval2010`** — [SemEval-2010 Task 14](https://doi.org/10.5281/zenodo.5638549)
+  (WSI & Disambiguation). Gold = one OntoNotes-style sense id per instance. The
+  target has no offset annotation, so it is located within `<TargetSentence>`
+  (whole-word match, falling back to the whole sentence).
 
-Both extractors emit the same occurrence schema, so every downstream stage is
-identical regardless of corpus.
+All four are English, so the WordNet→ImageNet visual-anchor bridge applies
+uniformly. Nouns only in the pilot. Every extractor emits the same occurrence
+schema, so downstream stages are identical regardless of corpus.
 
 ## What it does
 
@@ -81,14 +90,16 @@ export IMAGENET_ROOT=/path/to/imagenet   # dir of n######## class folders, or it
 bash run.sh
 ```
 
-To run on DWUG EN instead of SemCor, fetch the dataset once and set `CORPUS`:
+To run on another corpus, fetch it once and set `CORPUS`:
 
 ```bash
-make dwug-fetch                 # downloads dwug_en v3.0.0 into data/dwug_en
-CORPUS=dwug_en bash run.sh      # or: make data CORPUS=dwug_en, etc.
+make dwug-fetch        && CORPUS=dwug_en     bash run.sh
+make semeval2013-fetch && CORPUS=semeval2013 bash run.sh
+make semeval2010-fetch && CORPUS=semeval2010 bash run.sh
 ```
 
-`DWUG_EN_ROOT` overrides the dataset location (default `data/dwug_en`).
+Each corpus honours a `*_ROOT` env var for its extracted location (defaults
+`data/dwug_en`, `data/semeval2013`, `data/semeval2010`).
 
 If `IMAGENET_ROOT` is unset or missing, the pipeline still runs end-to-end: the
 image-dependent systems are skipped and the text-only baselines plus the
@@ -103,7 +114,8 @@ Individual stages are also `make` targets (`make data`, `make contexts`,
 ```
 configs/pilot.yaml        all knobs (env ${IMAGENET_ROOT} expanded at load)
 src/pilotlib/             config, encoders, wordnet utils, metrics
-src/{audit,extract_semcor,extract_dwug,index_imagenet,select_targets}.py
+src/{audit,extract_semcor,extract_dwug,extract_semeval2013,extract_semeval2010}.py
+src/{index_imagenet,select_targets}.py
 src/{embed_imagenet,embed_contexts,construct_features}.py
 src/{cluster,evaluate,report}.py
 data/  cache/  results/   generated artifacts (git-ignored)

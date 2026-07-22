@@ -138,15 +138,25 @@ def main() -> None:
                       if "qwen+shuffled-image" in fusion_present
                       else {lem: np.nan for lem in visual_lemmas})
 
+        # Primary question — is the visual channel meaningful? The anchor profile
+        # ALONE vs. the same profile with class->prototype identity permuted.
+        img_prof = {lem: float(base.get((lem, "image-profile-only", -1.0), np.nan))
+                    for lem in visual_lemmas}
+        shuf_prof = {lem: float(base.get((lem, "shuffled-profile-only", -1.0), np.nan))
+                     for lem in visual_lemmas}
+        d_signal = np.array([img_prof[lem] - shuf_prof[lem] for lem in visual_lemmas])
+
         d_image = np.array([tuned_img[lem] - qwen_ari[lem] for lem in visual_lemmas])
         d_label = np.array([tuned_img[lem] - tuned_lbl[lem] for lem in visual_lemmas])
         nrs = int(cfg.evaluation.bootstrap_resamples)
         bootstrap = {
+            "delta_profile_signal": paired_bootstrap(d_signal, nrs, seed=cfg.seed),
             "delta_image_vs_qwen": paired_bootstrap(d_image, nrs, seed=cfg.seed),
             "delta_image_vs_label": paired_bootstrap(d_label, nrs, seed=cfg.seed),
             "per_lemma": {
                 lem: {"qwen": qwen_ari[lem], "qwen+image": tuned_img[lem],
                       "qwen+label": tuned_lbl[lem], "qwen+shuffled-image": tuned_shuf[lem],
+                      "image_profile": img_prof[lem], "shuffled_profile": shuf_prof[lem],
                       "delta_image": float(tuned_img[lem] - qwen_ari[lem]),
                       "subset": subset_of[lem]}
                 for lem in visual_lemmas
@@ -156,6 +166,11 @@ def main() -> None:
         multi = [lem for lem in visual_lemmas if subset_of[lem] == "multi_visual"]
         pos = np.clip(d_image, 0, None)
         summary.update(
+            macro_ari_image_profile=float(np.nanmean(list(img_prof.values()))),
+            macro_ari_shuffled_profile=float(np.nanmean(list(shuf_prof.values()))),
+            delta_profile_signal=float(np.nanmean(d_signal)),
+            frac_visual_profile_beats_null=float(
+                np.mean([img_prof[lem] > shuf_prof[lem] for lem in visual_lemmas])),
             macro_ari_qwen=float(np.nanmean(list(qwen_ari.values()))),
             macro_ari_qwen_image=float(np.nanmean(list(tuned_img.values()))),
             macro_ari_qwen_label=float(np.nanmean(list(tuned_lbl.values()))),
@@ -172,7 +187,10 @@ def main() -> None:
     (run / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     logger.info("Wrote metrics/per_lemma/macro/bootstrap/summary to %s", run)
     if visual_lemmas:
-        logger.info("macro ARI  qwen=%.4f  qwen+image=%.4f  qwen+label=%.4f",
+        logger.info("visual signal: image-profile=%.4f vs shuffled-null=%.4f (Δ=%.4f)",
+                    summary["macro_ari_image_profile"], summary["macro_ari_shuffled_profile"],
+                    summary["delta_profile_signal"])
+        logger.info("naive fusion: qwen=%.4f  qwen+image=%.4f  qwen+label=%.4f",
                     summary["macro_ari_qwen"], summary["macro_ari_qwen_image"],
                     summary["macro_ari_qwen_label"])
 

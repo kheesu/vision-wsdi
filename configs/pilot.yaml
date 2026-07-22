@@ -32,6 +32,9 @@ models:
 embedding:
   dtype: bfloat16              # native; use float16 to save memory
   prompt: null                 # null keeps the model default "Represent the user's input."
+  # Target-aware instruction for context text: {target} is filled with the lemma
+  # so the embedding focuses on that word's sense. Set to null for plain context.
+  instruction_template: 'Represent the meaning of the word "{target}" as used in the following context.'
   text_batch_size: 16
   image_batch_size: 8
 

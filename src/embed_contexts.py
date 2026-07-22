@@ -88,7 +88,22 @@ def main() -> None:
         dtype=cfg.embedding.get("dtype", "bfloat16"),
         prompt=cfg.embedding.get("prompt", None),
     )
-    text_vecs = embedder.encode_texts(windows, batch_size=int(cfg.embedding.text_batch_size))
+    bs = int(cfg.embedding.text_batch_size)
+    template = cfg.embedding.get("instruction_template", None)
+    if template:
+        # Target-aware instruction: encode each lemma's occurrences with an
+        # instruction naming that word, reassembling into the original row order.
+        parts = []
+        for lemma, idx in sel.groupby("lemma").groups.items():
+            idx = list(idx)
+            prompt = template.format(target=str(lemma).replace("_", " "))
+            vecs = embedder.encode_texts([windows[i] for i in idx], batch_size=bs, prompt=prompt)
+            parts.append((idx, vecs))
+        text_vecs = np.empty((len(sel), parts[0][1].shape[1]), dtype=np.float32)
+        for idx, vecs in parts:
+            text_vecs[idx] = vecs
+    else:
+        text_vecs = embedder.encode_texts(windows, batch_size=bs)
 
     meta = sel[["lemma", "sentence_id", "gold_synset", "subset"]].to_dict("records")
     Path(args.text_output).parent.mkdir(parents=True, exist_ok=True)

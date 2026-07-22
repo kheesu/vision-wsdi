@@ -42,8 +42,8 @@ class QwenEmbedder:
             model_kwargs={"torch_dtype": dtype},
         )
 
-    def _encode(self, inputs: list, batch_size: int) -> np.ndarray:
-        kwargs = {"prompt": self.prompt} if self.prompt else {}
+    def _encode(self, inputs: list, batch_size: int, prompt: str | None) -> np.ndarray:
+        kwargs = {"prompt": prompt} if prompt else {}
         vecs = self.model.encode(
             inputs,
             batch_size=batch_size,
@@ -54,11 +54,17 @@ class QwenEmbedder:
         )
         return np.asarray(vecs, dtype=np.float32)
 
-    def encode_texts(self, texts: list[str], batch_size: int = 16) -> np.ndarray:
-        """(N, D) unit-norm embeddings for a list of strings."""
-        return self._encode(list(texts), batch_size)
+    def encode_texts(self, texts: list[str], batch_size: int = 16,
+                     prompt: str | None = None) -> np.ndarray:
+        """(N, D) unit-norm embeddings for a list of strings.
+
+        ``prompt`` overrides the instance default for this call (used to steer
+        the embedding toward a specific target word); ``None`` falls back to
+        ``self.prompt`` (and if that is also ``None``, the model's own default).
+        """
+        return self._encode(list(texts), batch_size, prompt or self.prompt)
 
     def encode_image_paths(self, paths: list, batch_size: int = 8) -> np.ndarray:
         """(N, D) unit-norm embeddings for a list of local image paths."""
         docs = [{"image": str(p)} for p in paths]
-        return self._encode(docs, batch_size)
+        return self._encode(docs, batch_size, self.prompt)

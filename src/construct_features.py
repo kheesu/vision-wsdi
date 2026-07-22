@@ -7,7 +7,8 @@ underpins every system:
     qwen+image           z^λ            [h~ ; λ·zscore(a_img)]  (image prototypes)
     qwen+label           z^λ            [h~ ; λ·zscore(a_lbl)]  (label prototypes)
     qwen+shuffled-image  z^λ            image prototypes permuted across classes
-    image-profile-only   a_img          diagnostic
+    image-profile-only   a_img          anchor profile alone (is the signal real?)
+    shuffled-profile-only a_shuf         permuted-anchor null for image-profile-only
 
 The anchor profile a_i[c] = cos(t_i, v_c) uses the *raw* (un-PCA'd) Qwen text
 embedding t_i so it stays in the shared image/text space. To keep image and
@@ -115,6 +116,9 @@ class FeatureBank:
             shuffled = {self._proto_wnids[i]: self.image_proto[self._proto_wnids[perm[i]]]
                         for i in range(len(self._proto_wnids))}
             a_shuf = self._profile(t, [w for w in img_anchors], shuffled)
+            # Null for the "is the visual signal meaningful?" test: the anchor
+            # profile alone, but with class->prototype identity permuted.
+            out["systems"]["shuffled-profile-only"] = a_shuf
 
             zc_img, zc_lbl, zc_shuf = _zscore(a_img), _zscore(a_lbl), _zscore(a_shuf)
             for lam in lambdas:
