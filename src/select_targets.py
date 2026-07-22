@@ -5,10 +5,15 @@ Selection criteria (from the plan):
     n_retained_senses                    >= data.min_senses
     examples per retained sense          >= data.min_occurrences_per_sense
 
-Visual-anchor set C_w = {ImageNet class c : w is a WordNet lemma of c}. Subsets:
-    multi_visual      |C_w| >= 2                 (distinct senses may have distinct anchors)
-    visual_nonvisual  |C_w| == 1, >= 2 senses    (one concrete sense vs other usages)
-    text_only         |C_w| == 0                 (no anchor; kept so the text-only
+A word sense is *visually grounded* when an ImageNet class lies within
+``data.anchor_max_hypernym_dist`` WordNet hypernym levels below it (see
+``pilotlib.wordnet_utils.sense_anchors``). The visual-anchor set is the union of
+those grounded senses' ImageNet classes, and subsets are keyed on the number of
+*grounded senses* g_w (not the raw anchor count, which would flag a single
+concrete sense with many hyponyms):
+    multi_visual      g_w >= 2                    (>=2 senses with distinct anchors)
+    visual_nonvisual  g_w == 1                    (one concrete sense vs other usages)
+    text_only         g_w == 0                    (no anchor; kept so the text-only
                                                    baselines still have targets, e.g.
                                                    when ImageNet is absent — excluded
                                                    from the image go/no-go comparison)
@@ -17,27 +22,19 @@ from __future__ import annotations
 
 import argparse
 import logging
-from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
 
 from src.pilotlib.config import load_config
+from src.pilotlib.wordnet_utils import imagenet_ancestor_index, sense_anchors
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def _lemma_to_wnids(index: pd.DataFrame) -> dict[str, list[str]]:
-    mapping: dict[str, list[str]] = defaultdict(list)
-    for row in index.itertuples(index=False):
-        for lemma in row.lemmas:
-            mapping[lemma].append(row.wnid)
-    return mapping
-
-
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Select SemCor target lemmas.")
+    ap = argparse.ArgumentParser(description="Select target lemmas and visual subsets.")
     ap.add_argument("--occurrences", default="data/semcor_occurrences.parquet")
     ap.add_argument("--imagenet-index", default="data/imagenet_classes.parquet")
     ap.add_argument("--config", default="configs/pilot.yaml")
@@ -47,11 +44,17 @@ def main() -> None:
     cfg = load_config(args.config)
     occ = pd.read_parquet(args.occurrences)
     index = pd.read_parquet(args.imagenet_index)
-    lemma2wnids = _lemma_to_wnids(index) if len(index) else {}
 
     min_occ = cfg.data.min_occurrences
     min_senses = cfg.data.min_senses
     min_per_sense = cfg.data.min_occurrences_per_sense
+    max_dist = cfg.data.get("anchor_max_hypernym_dist", 3)
+    cap = cfg.data.get("anchor_max_per_sense", 12)
+
+    # ancestor -> {imagenet wnid: hypernym distance}; empty when ImageNet is absent.
+    ancestor_index = (
+        imagenet_ancestor_index(index["wnid"].tolist(), max_dist) if len(index) else {}
+    )
 
     rows = []
     for lemma, grp in occ.groupby("lemma"):
@@ -63,10 +66,12 @@ def main() -> None:
         if n_occ < min_occ:
             continue
 
-        wnids = sorted(set(lemma2wnids.get(lemma, [])))
-        if len(wnids) >= 2:
+        grounded = sense_anchors(lemma, ancestor_index, cap) if ancestor_index else {}
+        wnids = sorted({w for anchors in grounded.values() for w in anchors})
+        n_grounded = len(grounded)
+        if n_grounded >= 2:
             subset = "multi_visual"
-        elif len(wnids) == 1:
+        elif n_grounded == 1:
             subset = "visual_nonvisual"
         else:
             subset = "text_only"
@@ -78,8 +83,10 @@ def main() -> None:
                 "n_occurrences": n_occ,
                 "n_senses": len(retained),
                 "gold_k": len(retained),
+                "n_visual_senses": n_grounded,
                 "n_visual_anchors": len(wnids),
                 "anchor_wnids": ";".join(wnids),
+                "anchor_senses": ";".join(sorted(grounded)),
                 "retained_senses": ";".join(sorted(retained.index)),
             }
         )

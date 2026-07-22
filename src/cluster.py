@@ -70,8 +70,7 @@ def main() -> None:
     ap.add_argument("--config", default="configs/pilot.yaml")
     ap.add_argument("--output", default="results/oracle_k")
     ap.add_argument("--mode", choices=["oracle", "unknown"], default=None)
-    ap.add_argument("--bert", default="cache/bert_contexts.pt")
-    ap.add_argument("--clip", default="cache/clip_contexts.pt")
+    ap.add_argument("--text", default="cache/text_contexts.pt")
     ap.add_argument("--image-prototypes", default="cache/imagenet_prototypes.pt")
     ap.add_argument("--label-prototypes", default="cache/label_prototypes.pt")
     ap.add_argument("--targets", default="data/targets.csv")
@@ -84,7 +83,7 @@ def main() -> None:
     n_init = int(cfg.clustering.n_init)
 
     bank = FeatureBank(
-        args.bert, args.clip, args.image_prototypes, args.label_prototypes,
+        args.text, args.image_prototypes, args.label_prototypes,
         args.targets, pca_dim=int(cfg.contexts.pca_dimensions),
     )
     lemmas = bank.lemmas()

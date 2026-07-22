@@ -1,8 +1,12 @@
-.PHONY: setup lint test audit data prototypes contexts cluster evaluate report pilot clean
+.PHONY: setup lint test audit data data-semcor data-dwug dwug-fetch prototypes contexts cluster evaluate report pilot clean
 
 CONFIG ?= configs/pilot.yaml
 RUN    ?= results/oracle_k
 PY     ?= python
+CORPUS ?= semcor
+# Occurrence parquet fed to select_targets; switches with the corpus.
+OCC    ?= data/$(if $(filter dwug_en,$(CORPUS)),dwug,semcor)_occurrences.parquet
+DWUG_EN_ROOT ?= data/dwug_en
 
 # Keep BLAS single-threaded: POT/numpy/scipy can segfault (exit 139) when the
 # system OpenBLAS spawns more threads than it was built for on many-core hosts.
@@ -31,19 +35,33 @@ test:
 audit:
 	$(PY) -m src.audit --imagenet-root "$$IMAGENET_ROOT" --output box_audit.json
 
-data:
-	$(PY) -m src.extract_semcor --output data/semcor_occurrences.parquet
+# `make data` extracts the occurrences for $(CORPUS), then selects targets.
+data: data-$(CORPUS)
 	$(PY) -m src.index_imagenet --root "$$IMAGENET_ROOT" --output data/imagenet_classes.parquet
-	$(PY) -m src.select_targets --occurrences data/semcor_occurrences.parquet \
+	$(PY) -m src.select_targets --occurrences $(OCC) \
 	  --imagenet-index data/imagenet_classes.parquet --config $(CONFIG) --output data/targets.csv
+
+data-semcor:
+	$(PY) -m src.extract_semcor --output data/semcor_occurrences.parquet
+
+# DWUG EN: fetch the dataset first (make dwug-fetch), then extract usages.
+data-dwug_en:
+	$(PY) -m src.extract_dwug --dwug-root "$(DWUG_EN_ROOT)" --output data/dwug_occurrences.parquet
+
+dwug-fetch:
+	@mkdir -p data
+	curl -sL "https://zenodo.org/api/records/7387261/files/dwug_en.zip/content" -o data/dwug_en.zip
+	cd data && unzip -q -o dwug_en.zip && rm -f dwug_en.zip
+	@echo ">>> DWUG EN v3.0.0 extracted to data/dwug_en"
 
 prototypes:
 	$(PY) -m src.embed_imagenet --config $(CONFIG) --output cache/imagenet_prototypes.pt
 
 contexts:
 	$(PY) -m src.embed_contexts --config $(CONFIG) \
-	  --occurrences data/semcor_occurrences.parquet --targets data/targets.csv \
-	  --bert-output cache/bert_contexts.pt --clip-output cache/clip_contexts.pt
+	  --occurrences $(OCC) --targets data/targets.csv \
+	  --imagenet-index data/imagenet_classes.parquet \
+	  --text-output cache/text_contexts.pt --label-output cache/label_prototypes.pt
 
 cluster:
 	$(PY) -m src.cluster --config $(CONFIG) --output $(RUN)

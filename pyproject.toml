@@ -5,7 +5,10 @@ description = "Do ImageNet-derived visual anchors improve unsupervised clusterin
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-  "transformers>=4.44",
+  "transformers>=4.57",
+  "sentence-transformers>=5.0",
+  "accelerate",
+  "qwen-vl-utils>=0.0.14",
   "tokenizers",
   "nltk>=3.9",
   "numpy",

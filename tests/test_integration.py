@@ -1,9 +1,12 @@
 """End-to-end test of cluster -> evaluate -> report on synthetic caches.
 
-Builds fixtures where the visual anchor profile carries a strong sense signal,
-BERT is only weakly separable, the label anchor is intermediate, and the
-shuffled control is uninformative. The pipeline should then produce a GO with
-ARI(bert+image) > ARI(bert+label) > ARI(bert) ~ ARI(shuffled).
+The pipeline now uses a single Qwen text embedding as both the clustering base
+and the anchor query, so the fixture is built so that the sense signal lives in a
+*low-variance* subspace that the global PCA drops (leaving the `qwen` base only
+weakly separable), while the image prototypes point exactly at that subspace so
+the explicit anchor profile recovers it. The label anchor is a weakened version
+and the shuffled anchor is uninformative, so the pipeline should produce a GO
+with ARI(qwen+image) > ARI(qwen+label) > ARI(qwen) ~ ARI(shuffled).
 """
 import json
 import subprocess
@@ -16,8 +19,16 @@ import torch
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-D_CLIP = 16
-H_BERT = 32
+BASE = 8          # high-variance noise dims (PCA keeps these -> weak base)
+SENSE = 8         # low-variance sense subspace (PCA drops; anchors recover it)
+D = BASE + SENSE
+PCA_DIM = 8
+BASE_STD = 0.6
+# Occurrence noise is large relative to the label's weak sense contrast but small
+# relative to the exact image prototype's, so image resolves senses and label
+# only partly does.
+SENSE_AMP = 0.4
+SENSE_NOISE = 0.3
 
 
 def _unit(v):
@@ -27,50 +38,49 @@ def _unit(v):
 def _build_fixtures(tmp: Path, seed: int = 0):
     rng = np.random.RandomState(seed)
     lemmas = ["alpha", "beta", "gamma", "delta"]
-    per_sense = 24
+    per_sense = 30
 
-    # Two orthonormal-ish visual concepts per lemma live in the CLIP space.
-    bert_rows, clip_rows, meta = [], [], []
+    text_rows, meta, targ_rows = [], [], []
     img_proto, lbl_proto = {}, {}
-    targ_rows = []
 
     for li, lemma in enumerate(lemmas):
-        w0, w1 = f"n{li:08d}", f"n{li+100:08d}"
-        v0 = _unit(rng.normal(size=D_CLIP))
-        v1 = _unit(rng.normal(size=D_CLIP))
-        img_proto[w0], img_proto[w1] = v0, v1
-        # Label prototypes: weaker sense signal (rotate toward the shared mean).
-        mean = _unit(v0 + v1)
-        lbl_proto[w0] = _unit(0.5 * v0 + 0.5 * mean)
-        lbl_proto[w1] = _unit(0.5 * v1 + 0.5 * mean)
+        w0, w1 = f"n{li:08d}", f"n{li + 100:08d}"
+        # Two orthonormal directions in the sense subspace.
+        q, _ = np.linalg.qr(rng.normal(size=(SENSE, 2)))
+        s0, s1 = q[:, 0], q[:, 1]
 
-        # BERT: two heavily overlapping blobs (weak text signal).
-        c0 = rng.normal(size=H_BERT)
-        c1 = c0 + 0.35 * rng.normal(size=H_BERT)
-        for sense_idx, (v, c) in enumerate([(v0, c0), (v1, c1)]):
+        def _full(sense_vec):
+            return _unit(np.concatenate([np.zeros(BASE), sense_vec]))
+
+        v0, v1 = _full(s0), _full(s1)
+        img_proto[w0], img_proto[w1] = v0, v1
+        # Label prototypes: cross-contaminated, so they only weakly distinguish
+        # the two senses (weaker control than the exact image prototypes).
+        lbl_proto[w0] = _unit(0.65 * v0 + 0.35 * v1)
+        lbl_proto[w1] = _unit(0.65 * v1 + 0.35 * v0)
+
+        for sense_idx, s_dir in [(0, s0), (1, s1)]:
             syn = f"{lemma}.n.0{sense_idx + 1}"
             for _ in range(per_sense):
-                clip_rows.append(_unit(v + 0.55 * rng.normal(size=D_CLIP)))
-                bert_rows.append(c + 1.4 * rng.normal(size=H_BERT))
+                base = BASE_STD * rng.normal(size=BASE)          # pure noise base
+                sense = SENSE_AMP * s_dir + SENSE_NOISE * rng.normal(size=SENSE)
+                text_rows.append(_unit(np.concatenate([base, sense])))
                 meta.append({"lemma": lemma, "sentence_id": len(meta),
                              "gold_synset": syn, "subset": "multi_visual"})
         targ_rows.append({
             "lemma": lemma, "subset": "multi_visual", "n_occurrences": 2 * per_sense,
-            "n_senses": 2, "gold_k": 2, "n_visual_anchors": 2,
-            "anchor_wnids": f"{w0};{w1}",
+            "n_senses": 2, "gold_k": 2, "n_visual_senses": 2, "n_visual_anchors": 2,
+            "anchor_wnids": f"{w0};{w1}", "anchor_senses": f"{lemma}.n.01;{lemma}.n.02",
             "retained_senses": f"{lemma}.n.01;{lemma}.n.02",
         })
 
-    bert = np.asarray(bert_rows, dtype=np.float32)
-    clip = np.asarray(clip_rows, dtype=np.float32)
+    text = np.asarray(text_rows, dtype=np.float32)
 
     (tmp / "cache").mkdir(parents=True, exist_ok=True)
     (tmp / "data").mkdir(parents=True, exist_ok=True)
-    torch.save({"vectors": bert, "meta": meta, "model": "fake-bert"}, tmp / "cache/bert.pt")
-    torch.save({"vectors": clip, "vectors_raw": None, "meta": meta, "model": "fake-clip"},
-               tmp / "cache/clip.pt")
+    torch.save({"vectors": text, "meta": meta, "model": "fake-qwen"}, tmp / "cache/text.pt")
     torch.save({"prototypes": {k: torch.from_numpy(v.astype(np.float32))
-                               for k, v in img_proto.items()}, "dim": D_CLIP},
+                               for k, v in img_proto.items()}, "dim": D},
                tmp / "cache/img.pt")
     torch.save({"prototypes": {k: torch.from_numpy(v.astype(np.float32))
                                for k, v in lbl_proto.items()}}, tmp / "cache/lbl.pt")
@@ -79,7 +89,7 @@ def _build_fixtures(tmp: Path, seed: int = 0):
     cfg = {
         "seed": 13,
         "fusion": {"lambdas": [0.5, 1.0, 2.0]},
-        "contexts": {"pca_dimensions": 64},
+        "contexts": {"pca_dimensions": PCA_DIM},
         "clustering": {"n_init": 5, "seeds": [13, 17, 19], "oracle_k": True,
                        "unknown_k_min": 2, "unknown_k_max": 4, "unknown_k_denom": 5},
         "evaluation": {"bootstrap_resamples": 2000},
@@ -98,7 +108,7 @@ def test_end_to_end_go(tmp_path):
     common = ["--config", str(tmp / "cfg.yaml")]
 
     _run("src.cluster", *common, "--mode", "oracle", "--output", str(run_dir),
-         "--bert", str(tmp / "cache/bert.pt"), "--clip", str(tmp / "cache/clip.pt"),
+         "--text", str(tmp / "cache/text.pt"),
          "--image-prototypes", str(tmp / "cache/img.pt"),
          "--label-prototypes", str(tmp / "cache/lbl.pt"),
          "--targets", str(tmp / "data/targets.csv"), cwd=ROOT)
@@ -107,13 +117,13 @@ def test_end_to_end_go(tmp_path):
 
     summary = json.loads((run_dir / "summary.json").read_text())
     assert summary["n_visual_lemmas"] == 4
-    assert summary["macro_ari_bert_image"] > summary["macro_ari_bert"]
-    assert summary["macro_ari_bert_image"] > summary["macro_ari_bert_label"]
+    assert summary["macro_ari_qwen_image"] > summary["macro_ari_qwen"]
+    assert summary["macro_ari_qwen_image"] > summary["macro_ari_qwen_label"]
     # Shuffled control must not match the real image gain.
-    assert summary["macro_ari_bert_image"] > summary["macro_ari_bert_shuffled"]
+    assert summary["macro_ari_qwen_image"] > summary["macro_ari_qwen_shuffled"]
 
     bootstrap = json.loads((run_dir / "bootstrap.json").read_text())
-    assert bootstrap["delta_image_vs_bert"]["point"] > 0
+    assert bootstrap["delta_image_vs_qwen"]["point"] > 0
     assert (run_dir / "report.md").exists()
     assert (run_dir / "metrics.csv").exists()
 
@@ -123,7 +133,7 @@ def test_unknown_k_runs(tmp_path):
     run_dir = tmp / "results/unknown_k"
     common = ["--config", str(tmp / "cfg.yaml")]
     _run("src.cluster", *common, "--mode", "unknown", "--output", str(run_dir),
-         "--bert", str(tmp / "cache/bert.pt"), "--clip", str(tmp / "cache/clip.pt"),
+         "--text", str(tmp / "cache/text.pt"),
          "--image-prototypes", str(tmp / "cache/img.pt"),
          "--label-prototypes", str(tmp / "cache/lbl.pt"),
          "--targets", str(tmp / "data/targets.csv"), cwd=ROOT)

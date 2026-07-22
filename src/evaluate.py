@@ -117,10 +117,10 @@ def main() -> None:
 
     # ---- go/no-go: tuned image deltas over visual lemmas -------------------
     lambdas = [float(x) for x in cfg.fusion.lambdas]
-    fusion_present = set(pl["method"]) & {"bert+image", "bert+label", "bert+shuffled-image"}
+    fusion_present = set(pl["method"]) & {"qwen+image", "qwen+label", "qwen+shuffled-image"}
     visual_lemmas = sorted(
-        pl[(pl["subset"].isin(VISUAL_SUBSETS)) & (pl["method"] == "bert+image")]["lemma"].unique()
-    ) if "bert+image" in fusion_present else []
+        pl[(pl["subset"].isin(VISUAL_SUBSETS)) & (pl["method"] == "qwen+image")]["lemma"].unique()
+    ) if "qwen+image" in fusion_present else []
 
     summary: dict = {"mode": json.loads((run / "run.json").read_text())["mode"],
                      "n_visual_lemmas": len(visual_lemmas)}
@@ -129,25 +129,25 @@ def main() -> None:
     if visual_lemmas:
         base = pl.set_index(["lemma", "method", "lambda"])["ari_mean"]
         subset_of = {lem: pl[pl["lemma"] == lem]["subset"].iloc[0] for lem in visual_lemmas}
-        bert_ari = {lem: float(base.get((lem, "bert", -1.0), np.nan)) for lem in visual_lemmas}
-        tuned_img = _lolo_tuned_ari(pl, "bert+image", visual_lemmas, lambdas)
-        tuned_lbl = (_lolo_tuned_ari(pl, "bert+label", visual_lemmas, lambdas)
-                     if "bert+label" in fusion_present
+        qwen_ari = {lem: float(base.get((lem, "qwen", -1.0), np.nan)) for lem in visual_lemmas}
+        tuned_img = _lolo_tuned_ari(pl, "qwen+image", visual_lemmas, lambdas)
+        tuned_lbl = (_lolo_tuned_ari(pl, "qwen+label", visual_lemmas, lambdas)
+                     if "qwen+label" in fusion_present
                      else {lem: np.nan for lem in visual_lemmas})
-        tuned_shuf = (_lolo_tuned_ari(pl, "bert+shuffled-image", visual_lemmas, lambdas)
-                      if "bert+shuffled-image" in fusion_present
+        tuned_shuf = (_lolo_tuned_ari(pl, "qwen+shuffled-image", visual_lemmas, lambdas)
+                      if "qwen+shuffled-image" in fusion_present
                       else {lem: np.nan for lem in visual_lemmas})
 
-        d_image = np.array([tuned_img[lem] - bert_ari[lem] for lem in visual_lemmas])
+        d_image = np.array([tuned_img[lem] - qwen_ari[lem] for lem in visual_lemmas])
         d_label = np.array([tuned_img[lem] - tuned_lbl[lem] for lem in visual_lemmas])
         nrs = int(cfg.evaluation.bootstrap_resamples)
         bootstrap = {
-            "delta_image_vs_bert": paired_bootstrap(d_image, nrs, seed=cfg.seed),
+            "delta_image_vs_qwen": paired_bootstrap(d_image, nrs, seed=cfg.seed),
             "delta_image_vs_label": paired_bootstrap(d_label, nrs, seed=cfg.seed),
             "per_lemma": {
-                lem: {"bert": bert_ari[lem], "bert+image": tuned_img[lem],
-                      "bert+label": tuned_lbl[lem], "bert+shuffled-image": tuned_shuf[lem],
-                      "delta_image": float(tuned_img[lem] - bert_ari[lem]),
+                lem: {"qwen": qwen_ari[lem], "qwen+image": tuned_img[lem],
+                      "qwen+label": tuned_lbl[lem], "qwen+shuffled-image": tuned_shuf[lem],
+                      "delta_image": float(tuned_img[lem] - qwen_ari[lem]),
                       "subset": subset_of[lem]}
                 for lem in visual_lemmas
             },
@@ -156,13 +156,13 @@ def main() -> None:
         multi = [lem for lem in visual_lemmas if subset_of[lem] == "multi_visual"]
         pos = np.clip(d_image, 0, None)
         summary.update(
-            macro_ari_bert=float(np.nanmean(list(bert_ari.values()))),
-            macro_ari_bert_image=float(np.nanmean(list(tuned_img.values()))),
-            macro_ari_bert_label=float(np.nanmean(list(tuned_lbl.values()))),
-            macro_ari_bert_shuffled=float(np.nanmean(list(tuned_shuf.values()))),
+            macro_ari_qwen=float(np.nanmean(list(qwen_ari.values()))),
+            macro_ari_qwen_image=float(np.nanmean(list(tuned_img.values()))),
+            macro_ari_qwen_label=float(np.nanmean(list(tuned_lbl.values()))),
+            macro_ari_qwen_shuffled=float(np.nanmean(list(tuned_shuf.values()))),
             delta_image=float(np.nanmean(d_image)),
             frac_multi_visual_improved=(
-                float(np.mean([tuned_img[lem] - bert_ari[lem] > 0 for lem in multi]))
+                float(np.mean([tuned_img[lem] - qwen_ari[lem] > 0 for lem in multi]))
                 if multi else None),
             max_single_lemma_share=(
                 float(np.nanmax(pos) / pos.sum()) if pos.sum() > 0 else None),
@@ -172,9 +172,9 @@ def main() -> None:
     (run / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     logger.info("Wrote metrics/per_lemma/macro/bootstrap/summary to %s", run)
     if visual_lemmas:
-        logger.info("macro ARI  bert=%.4f  bert+image=%.4f  bert+label=%.4f",
-                    summary["macro_ari_bert"], summary["macro_ari_bert_image"],
-                    summary["macro_ari_bert_label"])
+        logger.info("macro ARI  qwen=%.4f  qwen+image=%.4f  qwen+label=%.4f",
+                    summary["macro_ari_qwen"], summary["macro_ari_qwen_image"],
+                    summary["macro_ari_qwen_label"])
 
 
 if __name__ == "__main__":

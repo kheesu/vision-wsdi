@@ -1,4 +1,4 @@
-"""Compute normalised CLIP visual prototypes for the required ImageNet classes.
+"""Compute normalised Qwen3-VL visual prototypes for the required ImageNet classes.
 
 For each class c, v_c = normalize( (1/M) * sum_j f_I(x_cj) ), M = samples_per_class,
 with x_cj a deterministic sample of the class's training images. Only the WNIDs
@@ -65,7 +65,7 @@ def main() -> None:
         "dim": 0,
         "wnids": [],
         "samples_per_class": cfg.images.samples_per_class,
-        "model": cfg.models.vision_language,
+        "model": cfg.models.embedding,
     }
     if not status.available:
         logger.warning("ImageNet unavailable (%s); writing empty prototype cache.", status.reason)
@@ -73,14 +73,16 @@ def main() -> None:
         return
 
     needed = _needed_wnids(Path(args.targets))
-    from src.pilotlib.embedders import ClipImageEmbedder
+    from src.pilotlib.embedders import QwenEmbedder
 
-    embedder = ClipImageEmbedder(
-        cfg.models.vision_language, use_fp16=bool(cfg.images.use_fp16)
+    embedder = QwenEmbedder(
+        cfg.models.embedding,
+        dtype=cfg.embedding.get("dtype", "bfloat16"),
+        prompt=cfg.embedding.get("prompt", None),
     )
     m = int(cfg.images.samples_per_class)
     seed = int(cfg.images.sampling_seed)
-    batch = int(cfg.images.batch_size)
+    batch = int(cfg.embedding.image_batch_size)
 
     prototypes: dict[str, torch.Tensor] = {}
     class_dirs = [d for d in sorted(status.train_dir.iterdir())
@@ -92,7 +94,7 @@ def main() -> None:
         paths = _sample_paths(class_dir, m, seed)
         if not paths:
             continue
-        feats = embedder.encode_paths(paths, batch_size=batch)  # (m, D) unit vectors
+        feats = embedder.encode_image_paths(paths, batch_size=batch)  # (m, D) unit vectors
         if feats.shape[0] == 0:
             continue
         proto = feats.mean(axis=0)
@@ -107,7 +109,7 @@ def main() -> None:
             "dim": dim,
             "wnids": sorted(prototypes),
             "samples_per_class": m,
-            "model": cfg.models.vision_language,
+            "model": cfg.models.embedding,
         },
         args.output,
     )

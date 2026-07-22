@@ -1,6 +1,9 @@
 # Non-torch dependencies. Install torch/torchvision separately with a CUDA build
 # that matches the box (RTX PRO 6000 / Blackwell needs a recent wheel). See README.
-transformers>=4.44
+transformers>=4.57            # Qwen3-VL embedding support
+sentence-transformers>=5.0    # loads Qwen/Qwen3-VL-Embedding-8B
+accelerate
+qwen-vl-utils>=0.0.14         # image preprocessing for Qwen3-VL
 tokenizers
 nltk>=3.9
 numpy

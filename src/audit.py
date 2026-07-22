@@ -88,8 +88,8 @@ def main() -> None:
     if not audit["imagenet"]["available"]:
         print(
             "\n[warn] ImageNet is not available: image-dependent systems "
-            "(bert+image, image-profile-only) will be skipped. The text-only "
-            "baselines and the bert+label control still run.",
+            "(qwen+image, image-profile-only) will be skipped. The text-only "
+            "baselines and the qwen+label control still run.",
             file=sys.stderr,
         )
 

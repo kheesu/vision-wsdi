@@ -1,17 +1,19 @@
 """Build per-lemma feature matrices for every system in the comparison.
 
-Systems (see the plan's controls table):
-    bert                 h~_i           global PCA_64 of BERT target-token vectors
-    clip-context         t_i            CLIP context-text embedding
-    bert+image           z^λ            [h~ ; λ·zscore(a_img)]  (image prototypes)
-    bert+label           z^λ            [h~ ; λ·zscore(a_lbl)]  (label prototypes)
-    bert+shuffled-image  z^λ            image prototypes permuted across classes
+A single Qwen3-VL embedding serves as both the clustering base and the visual-
+anchor query (text and images share one space), so a single text representation
+underpins every system:
+    qwen                 h~_i           global PCA_64 of the Qwen text embedding
+    qwen+image           z^λ            [h~ ; λ·zscore(a_img)]  (image prototypes)
+    qwen+label           z^λ            [h~ ; λ·zscore(a_lbl)]  (label prototypes)
+    qwen+shuffled-image  z^λ            image prototypes permuted across classes
     image-profile-only   a_img          diagnostic
 
-The anchor profile a_i[c] = cos(t_i, v_c). To keep image and label comparable
-they use the *same* candidate classes: the anchors that have both an image and a
-label prototype. Everything except the shuffle is seed-independent and computed
-once; the shuffle permutation is drawn per seed.
+The anchor profile a_i[c] = cos(t_i, v_c) uses the *raw* (un-PCA'd) Qwen text
+embedding t_i so it stays in the shared image/text space. To keep image and
+label comparable they use the *same* candidate classes: the anchors that have
+both an image and a label prototype. Everything except the shuffle is
+seed-independent and computed once; the shuffle permutation is drawn per seed.
 """
 from __future__ import annotations
 
@@ -24,7 +26,7 @@ from sklearn.decomposition import PCA
 
 logger = logging.getLogger(__name__)
 
-FUSION_SYSTEMS = ("bert+image", "bert+label", "bert+shuffled-image")
+FUSION_SYSTEMS = ("qwen+image", "qwen+label", "qwen+shuffled-image")
 
 
 def _zscore(a: np.ndarray) -> np.ndarray:
@@ -39,13 +41,12 @@ def _l2(a: np.ndarray) -> np.ndarray:
 
 
 class FeatureBank:
-    def __init__(self, bert_path, clip_path, image_proto_path, label_proto_path,
+    def __init__(self, text_path, image_proto_path, label_proto_path,
                  targets_csv, pca_dim: int):
-        bert = torch.load(bert_path, weights_only=False)
-        clip = torch.load(clip_path, weights_only=False)
-        self.meta = pd.DataFrame(bert["meta"])
-        self.bert = np.asarray(bert["vectors"], dtype=np.float32)
-        self.clip = np.asarray(clip["vectors"], dtype=np.float32)
+        text = torch.load(text_path, weights_only=False)
+        self.meta = pd.DataFrame(text["meta"])
+        # One Qwen text embedding, reused as the clustering base and anchor query.
+        self.text = np.asarray(text["vectors"], dtype=np.float32)
 
         img = torch.load(image_proto_path, weights_only=False)
         lbl = torch.load(label_proto_path, weights_only=False)
@@ -60,10 +61,10 @@ class FeatureBank:
         self.subset_of = dict(zip(tgt["lemma"], tgt["subset"]))
         self.gold_k = dict(zip(tgt["lemma"], tgt["gold_k"]))
 
-        # Global PCA over all retained BERT occurrence vectors.
-        n_comp = min(pca_dim, self.bert.shape[0], self.bert.shape[1])
-        self.pca = PCA(n_components=n_comp, random_state=0).fit(self.bert)
-        self.bert_pca = self.pca.transform(self.bert).astype(np.float32)
+        # Global PCA over all retained text embeddings -> clustering base h~.
+        n_comp = min(pca_dim, self.text.shape[0], self.text.shape[1])
+        self.pca = PCA(n_components=n_comp, random_state=0).fit(self.text)
+        self.text_pca = self.pca.transform(self.text).astype(np.float32)
 
         # Gold label ids per lemma, and row indices per lemma.
         self.rows = {lem: idx.to_numpy() for lem, idx in
@@ -87,8 +88,8 @@ class FeatureBank:
 
     def build(self, lemma: str, lambdas, seed: int) -> dict:
         ridx = self.rows[lemma]
-        h = self.bert_pca[ridx]
-        t = self.clip[ridx]
+        h = self.text_pca[ridx]           # PCA-64 clustering base h~
+        t = self.text[ridx]               # raw Qwen text embedding, anchor query t_i
         gold = self._gold_ids[lemma]
 
         out = {
@@ -96,7 +97,7 @@ class FeatureBank:
             "gold_k": int(self.gold_k.get(lemma, len(np.unique(gold)))),
             "gold": gold,
             "n": len(ridx),
-            "systems": {"bert": h, "clip-context": t},
+            "systems": {"qwen": h},
         }
 
         # Candidate classes shared by image + label prototypes.
@@ -117,10 +118,10 @@ class FeatureBank:
 
             zc_img, zc_lbl, zc_shuf = _zscore(a_img), _zscore(a_lbl), _zscore(a_shuf)
             for lam in lambdas:
-                out["systems"].setdefault("bert+image", {})[lam] = _l2(
+                out["systems"].setdefault("qwen+image", {})[lam] = _l2(
                     np.hstack([h, lam * zc_img]))
-                out["systems"].setdefault("bert+label", {})[lam] = _l2(
+                out["systems"].setdefault("qwen+label", {})[lam] = _l2(
                     np.hstack([h, lam * zc_lbl]))
-                out["systems"].setdefault("bert+shuffled-image", {})[lam] = _l2(
+                out["systems"].setdefault("qwen+shuffled-image", {})[lam] = _l2(
                     np.hstack([h, lam * zc_shuf]))
         return out
