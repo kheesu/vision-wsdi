@@ -59,6 +59,18 @@ class FeatureBank:
             r.lemma: [w for w in str(r.anchor_wnids).split(";") if w]
             for r in tgt.itertuples(index=False)
         }
+        # lemma -> {grounded sense: [anchor wnids]} for nearest-sense assignment.
+        self.grouping = {}
+        if "anchor_grouping" in tgt.columns:
+            for r in tgt.itertuples(index=False):
+                groups = {}
+                for part in str(r.anchor_grouping).split("|"):
+                    if "=" in part:
+                        s, ws = part.split("=", 1)
+                        cols = [w for w in ws.split(",") if w]
+                        if cols:
+                            groups[s] = cols
+                self.grouping[r.lemma] = groups
         self.subset_of = dict(zip(tgt["lemma"], tgt["subset"]))
         self.gold_k = dict(zip(tgt["lemma"], tgt["gold_k"]))
 
@@ -119,6 +131,31 @@ class FeatureBank:
             # Null for the "is the visual signal meaningful?" test: the anchor
             # profile alone, but with class->prototype identity permuted.
             out["systems"]["shuffled-profile-only"] = a_shuf
+
+            # Nearest-SENSE assignment: score each grounded sense by the max
+            # cosine over its anchor classes, assign the usage to the argmax
+            # sense. A direct label prediction (no k-means), and its permuted
+            # null. Pools multiple ImageNet classes under one sense so a sense
+            # with several hyponyms is not over-split.
+            col = {w: i for i, w in enumerate(img_anchors)}
+            sense_cols: dict[str, list[int]] = {}
+            for sense, ws in self.grouping.get(lemma, {}).items():
+                idxs = [col[w] for w in ws if w in col]
+                if idxs:
+                    sense_cols[sense] = idxs
+            if not sense_cols:  # fallback: each anchor class is its own sense
+                sense_cols = {w: [i] for i, w in enumerate(img_anchors)}
+            senses_sorted = sorted(sense_cols)
+
+            def _assign(profile: np.ndarray) -> np.ndarray:
+                scores = np.stack(
+                    [profile[:, sense_cols[s]].max(axis=1) for s in senses_sorted], axis=1)
+                return scores.argmax(axis=1).astype(int)
+
+            out["direct"] = {
+                "anchor-assignment": _assign(a_img),
+                "anchor-assignment-shuffled": _assign(a_shuf),
+            }
 
             zc_img, zc_lbl, zc_shuf = _zscore(a_img), _zscore(a_lbl), _zscore(a_shuf)
             for lam in lambdas:

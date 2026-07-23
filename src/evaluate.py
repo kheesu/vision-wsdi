@@ -146,10 +146,18 @@ def main() -> None:
                      for lem in visual_lemmas}
         d_signal = np.array([img_prof[lem] - shuf_prof[lem] for lem in visual_lemmas])
 
+        # Grounded sense ASSIGNMENT (nearest-sense-anchor) vs its permuted null.
+        assign = {lem: float(base.get((lem, "anchor-assignment", -1.0), np.nan))
+                  for lem in visual_lemmas}
+        assign_null = {lem: float(base.get((lem, "anchor-assignment-shuffled", -1.0), np.nan))
+                       for lem in visual_lemmas}
+        d_assign = np.array([assign[lem] - assign_null[lem] for lem in visual_lemmas])
+
         d_image = np.array([tuned_img[lem] - qwen_ari[lem] for lem in visual_lemmas])
         d_label = np.array([tuned_img[lem] - tuned_lbl[lem] for lem in visual_lemmas])
         nrs = int(cfg.evaluation.bootstrap_resamples)
         bootstrap = {
+            "delta_assignment_signal": paired_bootstrap(d_assign, nrs, seed=cfg.seed),
             "delta_profile_signal": paired_bootstrap(d_signal, nrs, seed=cfg.seed),
             "delta_image_vs_qwen": paired_bootstrap(d_image, nrs, seed=cfg.seed),
             "delta_image_vs_label": paired_bootstrap(d_label, nrs, seed=cfg.seed),
@@ -157,6 +165,7 @@ def main() -> None:
                 lem: {"qwen": qwen_ari[lem], "qwen+image": tuned_img[lem],
                       "qwen+label": tuned_lbl[lem], "qwen+shuffled-image": tuned_shuf[lem],
                       "image_profile": img_prof[lem], "shuffled_profile": shuf_prof[lem],
+                      "anchor_assignment": assign[lem], "assignment_null": assign_null[lem],
                       "delta_image": float(tuned_img[lem] - qwen_ari[lem]),
                       "subset": subset_of[lem]}
                 for lem in visual_lemmas
@@ -166,6 +175,11 @@ def main() -> None:
         multi = [lem for lem in visual_lemmas if subset_of[lem] == "multi_visual"]
         pos = np.clip(d_image, 0, None)
         summary.update(
+            macro_ari_anchor_assignment=float(np.nanmean(list(assign.values()))),
+            macro_ari_assignment_null=float(np.nanmean(list(assign_null.values()))),
+            delta_assignment_signal=float(np.nanmean(d_assign)),
+            frac_assignment_beats_null=float(
+                np.mean([assign[lem] > assign_null[lem] for lem in visual_lemmas])),
             macro_ari_image_profile=float(np.nanmean(list(img_prof.values()))),
             macro_ari_shuffled_profile=float(np.nanmean(list(shuf_prof.values()))),
             delta_profile_signal=float(np.nanmean(d_signal)),
@@ -187,6 +201,9 @@ def main() -> None:
     (run / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     logger.info("Wrote metrics/per_lemma/macro/bootstrap/summary to %s", run)
     if visual_lemmas:
+        logger.info("assignment: anchor=%.4f vs null=%.4f (Δ=%.4f)",
+                    summary["macro_ari_anchor_assignment"], summary["macro_ari_assignment_null"],
+                    summary["delta_assignment_signal"])
         logger.info("visual signal: image-profile=%.4f vs shuffled-null=%.4f (Δ=%.4f)",
                     summary["macro_ari_image_profile"], summary["macro_ari_shuffled_profile"],
                     summary["delta_profile_signal"])

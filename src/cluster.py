@@ -124,6 +124,18 @@ def main() -> None:
                         "pred": [int(p) for p in pred],
                     }
                 )
+            # Direct label predictions (nearest-sense anchor assignment): no
+            # k-means, K is determined by the assignment itself.
+            for method, labels in feats.get("direct", {}).items():
+                labels = np.asarray(labels)
+                rows.append(
+                    {
+                        "method": method, "lambda": -1.0, "seed": seed,
+                        "lemma": lemma, "subset": feats["subset"], "n_occurrences": n,
+                        "gold_k": gold_k, "predicted_k": int(len(np.unique(labels))),
+                        "gold": gold.tolist(), "pred": [int(p) for p in labels],
+                    }
+                )
 
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)

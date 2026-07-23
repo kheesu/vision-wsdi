@@ -87,6 +87,10 @@ def main() -> None:
                 "n_visual_anchors": len(wnids),
                 "anchor_wnids": ";".join(wnids),
                 "anchor_senses": ";".join(sorted(grounded)),
+                # sense -> its anchor WNIDs, so downstream can pool anchors per
+                # grounded sense for nearest-sense assignment.
+                "anchor_grouping": "|".join(
+                    f"{s}={','.join(ws)}" for s, ws in sorted(grounded.items())),
                 "retained_senses": ";".join(sorted(retained.index)),
             }
         )

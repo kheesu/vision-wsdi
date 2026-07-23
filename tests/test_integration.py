@@ -71,6 +71,7 @@ def _build_fixtures(tmp: Path, seed: int = 0):
             "lemma": lemma, "subset": "multi_visual", "n_occurrences": 2 * per_sense,
             "n_senses": 2, "gold_k": 2, "n_visual_senses": 2, "n_visual_anchors": 2,
             "anchor_wnids": f"{w0};{w1}", "anchor_senses": f"{lemma}.n.01;{lemma}.n.02",
+            "anchor_grouping": f"{lemma}.n.01={w0}|{lemma}.n.02={w1}",
             "retained_senses": f"{lemma}.n.01;{lemma}.n.02",
         })
 
@@ -124,6 +125,9 @@ def test_end_to_end_go(tmp_path):
 
     bootstrap = json.loads((run_dir / "bootstrap.json").read_text())
     assert bootstrap["delta_image_vs_qwen"]["point"] > 0
+    # Nearest-anchor assignment recovers senses above its permuted null.
+    assert summary["macro_ari_anchor_assignment"] > summary["macro_ari_assignment_null"]
+    assert bootstrap["delta_assignment_signal"]["point"] > 0
     assert (run_dir / "report.md").exists()
     assert (run_dir / "metrics.csv").exists()
 
