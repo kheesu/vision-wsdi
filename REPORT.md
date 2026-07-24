@@ -24,16 +24,20 @@ clustering. We report three questions, in order of importance to the thesis:
 
 1. **Can we assign senses to usages via visible anchors?** — label each usage by
    its nearest grounded-sense anchor, `argmax_s max_c cos(t_i, v_c)`, and score
-   the induced partition. **Answer: yes for genuinely visual words — strikingly
-   so for *plane* (ARI 0.70 vs. 0.02 null)** — and DWUG's multi-visual set beats
-   its null in aggregate (0.245 vs. 0.034); weak/at-chance elsewhere.
+   the induced partition. **Answer: yes.** Under ImageNet-1k the evidence was a
+   handful of words (*plane* ARI 0.70 vs. 0.02 null); after expanding the visual
+   inventory to the needed **ImageNet-21k** classes (12 → 96 testable words),
+   assignment beats its permuted null **on every corpus**, and on the
+   best-powered benchmark (SemCor, 99 visual lemmas) the effect is
+   **statistically significant** (Δ = +0.030, 95% CI [+0.007, +0.056]).
 2. **Is the visual signal real at all?** — does the anchor profile *alone*
    cluster senses above a permuted-anchor null? **Answer: the signal is present**
    (e.g. *board* profile 0.58, *table* 0.47) even where hard assignment is
-   brittle — so the information exists; realizing it as labels is the open part.
+   brittle — so the information exists beyond what argmax labelling realizes.
 3. **Does it beat a strong text model under naive fusion?** (the hard bar, not
-   the thesis) — **Answer: no**, across all four corpora; concatenating the raw
-   anchor profile onto a strong text embedding does not help.
+   the thesis) — **Answer: no**, across all corpora and both inventories;
+   concatenating the raw anchor profile onto a strong text embedding does not
+   help.
 
 The demonstration on (1)/(2) is the point of the pilot; the negative on (3)
 motivates better grounding and calibrated assignment, not a retreat from the
@@ -187,28 +191,36 @@ We report three questions with distinct statistics (paired bootstrap over lemmas
 ## 5. Experimental setup
 
 - Hardware: NVIDIA RTX PRO 6000 Blackwell (single GPU); embeddings in bf16.
-- ImageNet: ILSVRC-2012 train split (1000 classes, ~1300 images each).
-- Retained visual lemmas per corpus (against real ImageNet-1k):
+- Visual inventories, two conditions:
+  - **ImageNet-1k**: ILSVRC-2012 train split (1000 classes, ~1300 images each).
+  - **ImageNet-21k (targeted)**: the winter21 release hosts per-synset tarballs;
+    rather than the full ~1.3 TB we downloaded **only the 1,115 anchor classes**
+    the four corpora actually need (~81 GB; 216 further wanted classes are
+    absent from winter21), merged with ILSVRC into a 2,115-class root.
+- Retained visual lemmas per corpus under each inventory:
 
-| corpus | lemmas selected | visual lemmas | of which multi_visual |
+| corpus | lemmas selected | visual (1k → 21k) | multi_visual (1k → 21k) |
 |---|---|---|---|
-| SemCor | 209 | 25 | 7 |
-| DWUG EN | 21 | 6 | 3 |
-| SemEval-2010 | 37 | 4 | 2 |
-| SemEval-2013 | 15 | 3 | 0 |
+| SemCor | 209 | 25 → 99 | 7 → **64** |
+| DWUG EN | 21 | 6 → 15 | 3 → **12** |
+| SemEval-2010 | 37 | 4 → 20 | 2 → **14** |
+| SemEval-2013 | 15 | 3 → 10 | 0 → **6** |
 
-The small visual-lemma counts are the central practical constraint: **ImageNet-1k
-is a narrow visual inventory**, so few polysemous nouns have ≥ 2 senses that each
-land under an ImageNet subtree. This limits statistical power and is a coverage
-ceiling, not a modelling choice.
+Under ImageNet-1k the visual-lemma counts are the central practical constraint:
+few polysemous nouns have ≥ 2 senses that each land under an ImageNet-1k
+subtree, which limits statistical power. The targeted 21k expansion lifts the
+assignment-testable vocabulary from **12 to 96 words** (~8×) and, on SemCor,
+raises words whose *gold* senses are all anchorable from 0 to 12.
 
 ---
 
 ## 6. Results
 
-All eight runs use the same pipeline (Qwen encoder, target-aware instruction,
-reoriented reporting). `anchor` = `image-profile-only`; `null` =
-`shuffled-profile-only`; `text` = `qwen`; `+img`/`+lbl` = fused image/label.
+Sixteen runs share one pipeline (Qwen encoder, target-aware instruction): 4
+corpora × {oracle-K, unknown-K} × {ImageNet-1k, ImageNet-21k}. The table below
+is the ImageNet-1k condition; §6.1 carries the 21k comparison. `anchor` =
+`image-profile-only`; `null` = `shuffled-profile-only`; `text` = `qwen`;
+`+img`/`+lbl` = fused image/label.
 
 | corpus (mode) | #vis | anchor | null | Δ_signal | text | +img | Δ_image | +lbl |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -225,49 +237,79 @@ reoriented reporting). `anchor` = `image-profile-only`; `null` =
 
 Assigning each usage to its nearest grounded-sense anchor, scored over
 `multi_visual` lemmas (the fair scope; identical in oracle/unknown-K since
-assignment is K-free):
+assignment is K-free), under both visual inventories:
 
-| corpus | #multi_visual | assignment ARI | permuted null |
+| corpus | 1k: #mv, assign / null | 21k: #mv, assign / null |
+|---|---|---|
+| SemCor | 7 — 0.058 / 0.045 | **64 — 0.080 / 0.034** |
+| DWUG EN | 3 — 0.245 / 0.034 | 12 — 0.199 / 0.106 |
+| SemEval-2013 | 0 — n/a | **6 — 0.208 / 0.043** |
+| SemEval-2010 | 2 — −0.032 / 0.018 | 14 — 0.103 / 0.084 |
+
+Under ImageNet-1k the evidence rests on a couple of words; under the 21k
+expansion **assignment beats its permuted null on all four corpora**, and the
+paired bootstrap over all visual lemmas gives the study's first significant
+aggregate:
+
+| corpus (21k) | n visual | Δ_assign | 95% CI | excludes 0 |
+|---|---:|---:|---|---|
+| **SemCor** | 99 | **+0.030** | [+0.007, +0.056] | **yes** |
+| SemEval-2013 | 10 | +0.099 | [+0.000, +0.216] | yes (marginal) |
+| DWUG EN | 15 | +0.074 | [−0.017, +0.182] | no |
+| SemEval-2010 | 20 | +0.013 | [−0.043, +0.082] | no |
+
+The effect also stops being a two-word anecdote. Words where assignment beats
+its null by > 0.15 (was: `plane`, `board`) now include, e.g.:
+
+| word | assignment ARI | null | text (`qwen`) |
 |---|---:|---:|---:|
-| **DWUG EN** | 3 | **0.245** | 0.034 |
-| SemCor | 7 | 0.058 | 0.045 |
-| SemEval-2010 | 2 | −0.032 | 0.018 |
-| SemEval-2013 | 0 | — | — |
+| `cell` (SemEval-2010) | 0.93 | 0.43 | 1.00 |
+| **`plane`** (DWUG) | 0.68 | 0.18 | 0.72 |
+| **`head`** (DWUG) | **0.68** | 0.17 | **0.32** |
+| `plant` (SemCor) | 0.67 | 0.07 | 0.84 |
+| `course` (SemCor) | 0.65 | 0.08 | 0.78 |
+| **`cell`** (SemCor) | **0.58** | 0.07 | **0.33** |
+| `paper` (SemEval-2013) | 0.59 | 0.06 | 0.67 |
+| **`part`** (SemEval-2013) | **0.43** | 0.13 | **0.11** |
+| `floor` (SemCor) | 0.36 | 0.07 | 0.92 |
 
-The effect concentrates in individual words:
+Bolded rows are cases where the **visual assignment outperforms text-only
+clustering** (`head`, `cell`, `part`, also `bit`, `level`) — the first direct
+instances of the visual channel beating the text baseline on any measure.
 
-| word | assignment ARI | null | profile-clustering ARI |
-|---|---:|---:|---:|
-| **`plane`** (DWUG) | **0.70** | 0.02 | 0.43 |
-| `board` (SemCor) | 0.32 | 0.20 | 0.58 |
-| `light` (SemCor) | 0.12 | 0.01 | 0.11 |
-| `table` (SemCor) | −0.05 | 0.05 | 0.47 |
-| `ball` (DWUG) | −0.01 | 0.02 | 0.26 |
+Three takeaways. **(a)** Nearest-visible-anchor assignment — a *named,
+inspectable, inductive* sense labelling with no clustering — works, and with
+adequate coverage the effect is corpus-level and (on SemCor) statistically
+significant, not anecdotal. **(b)** It remains word-class-dependent: only
+25–40 % of visual lemmas beat their null; the aggregate is carried by genuinely
+visual words. **(c)** For several words (`table`, `ball`, `board` under 1k) the
+signal is present in the profile *geometry* (profile ARI 0.26–0.58) yet raw
+`argmax` underperforms it — the anchor space is informative but the
+nearest-anchor *decision rule* is uncalibrated; closing that gap is the open
+problem.
 
-Two takeaways. **(a)** For the cleanest visual word, `plane`, direct assignment
-to a *named, inspectable* anchor recovers senses at **ARI 0.70** — a grounded,
-inductive sense labelling with no clustering, exactly the capability text-only
-methods cannot offer. **(b)** For several words (`table`, `ball`, `board`) the
-visual signal is clearly present in the profile *geometry* (profile ARI
-0.26–0.58) yet raw `argmax` assignment underperforms it — the anchor space is
-informative, but the nearest-anchor *decision rule* is brittle/uncalibrated.
-The capability is demonstrated; making it robust (calibrated assignment,
-per-sense thresholds) is the open problem.
+### 6.2 Is the visual signal meaningful? (profile-clustering, aggregate)
 
-### 6.2 Is the visual signal meaningful? (aggregate)
+Weak and corpus/mode-dependent, under *both* inventories — and, tellingly, the
+21k expansion did **not** rescue this test the way it rescued assignment.
+Clustering the anchor profile beats its permuted null only marginally: under 21k
+the deltas are SemCor +0.020/+0.014, SemEval-2013 +0.063/+0.051, DWUG
++0.006/−0.034, SemEval-2010 +0.010/−0.014 (oracle/unknown). The absolute ARIs
+rose with more anchors (SemCor profile 0.07 → 0.19), but the *null* rose in
+lockstep — more anchor dimensions help k-means regardless of whether the images
+are correctly bound.
 
-Weak and corpus/mode-dependent. The anchor beats its permuted null in 5 of 8
-runs, but the margins are small and none clears a clean significance bar. The one
-standout is **DWUG EN unknown-K (Δ_signal = +0.089)**. Honest aggregate read:
-**at or near chance**, i.e. averaged over all visual lemmas the effect is not
-robustly distinguishable from zero — largely because the visual-lemma pools are
-small and dominated by marginally-visual words.
+This contrast is informative: extra visual coverage sharpened the **argmax
+assignment** decision (§6.1) far more than it sharpened **profile clustering**.
+Reading a single nearest-anchor label off the profile exploits class-specific
+structure that whole-vector clustering blurs. Honest aggregate read for the
+profile test itself: **at or near chance**.
 
-### 6.3 Is the visual signal meaningful? (per lemma — the real story)
+### 6.3 Profile clustering, per lemma (selectivity check)
 
-The aggregate hides the effect that matters. For words that are *genuinely
-visually polysemous*, the anchor **alone** recovers senses far above its null,
-and this **replicates across clustering regimes**:
+The weak aggregate (§6.2) hides sharp per-word structure. For words that are
+*genuinely visually polysemous*, the anchor **alone** recovers senses far above
+its null, and this **replicates across clustering regimes**:
 
 | word (corpus) | anchor-only ARI (oracle / unknown) | null (oracle / unknown) |
 |---|---|---|
@@ -284,16 +326,18 @@ information**.
 
 ### 6.4 Does it beat a strong text model under naive fusion?
 
-No, consistently. `Δ_image ≤ 0` in 7 of 8 runs (a single +0.004 tie). Two
-qualifications matter:
+No, consistently, and this is the one result the 21k expansion did **not**
+change. `Δ_image ≤ 0` in essentially every run under both inventories; under 21k
+it is negative on all four corpora (−0.04 to −0.09). Two qualifications matter:
 
 - The **target-aware instruction dramatically strengthened the text baseline**
   (e.g. DWUG `qwen` rose from ~0.24 with a plain instruction to 0.55/0.71). This
   is the single largest effect in the study — and it is on the *text* side.
-- Against that stronger baseline the image anchor is now **roughly neutral**
-  (−0.01 range) on DWUG and SemEval, rather than clearly harmful; only SemCor
-  still shows meaningful drag (−0.08). Naive concatenation of a coarse anchor
-  profile simply adds variance to an already-good representation.
+- Adding more (and more correctly-bound) anchors did not help fusion: naive
+  concatenation of the anchor profile onto an already-strong text representation
+  simply injects variance. This isolates the failure to the **fusion
+  mechanism**, not to coverage — the same signal that yields a significant
+  *assignment* result is wasted under fixed-λ concatenation.
 
 ### 6.5 Image vs. name
 
@@ -309,39 +353,49 @@ words the *name* of the visual concept is the more useful cue.
 The picture is coherent across four benchmarks. The visual channel carries
 **genuine but narrow** sense signal:
 
-- **Visible anchors *can* label usages.** For `plane`, nearest-visible-anchor
-  assignment recovers senses at ARI 0.70 with no clustering — a grounded,
-  inductive, human-inspectable sense labelling, which is the capability images
-  uniquely provide. DWUG's multi-visual set beats its null in aggregate.
-- **The signal is present more broadly than hard assignment realizes it.** For
-  `board`, `table`, `ball` the anchor-profile *geometry* clusters senses well
-  (ARI 0.26–0.58) while raw `argmax` assignment lags — the information is there,
-  but the nearest-anchor decision rule is uncalibrated. Closing this gap
-  (calibrated/thresholded assignment) is the most actionable next step.
-- **It is inert where it should be.** Abstract senses and non-visually-separable
-  words fall at chance — the anchor is not a generic "extra features help"
-  artifact.
-- **It does not beat a strong text model under naive fusion.** Three plausible,
-  compounding reasons: (i) **coverage** — ImageNet-1k yields too few genuinely
-  multi-visual words for the aggregate to move; (ii) **granularity** — an
-  *averaged* class prototype is a coarse "typical look," and cross-modal cosine
-  is dominated by broad topic rather than fine sense; (iii) **redundancy** — a
-  strong instruction-tuned text embedder already captures most of the sense
-  structure the images could add, so the anchor mostly injects variance.
+- **Visible anchors *can* label usages — at corpus scale.** Nearest-visible-anchor
+  assignment is a grounded, inductive, human-inspectable sense labelling with no
+  clustering. Under adequate visual coverage (21k) it beats its permuted null on
+  all four corpora and is **statistically significant on SemCor** (99 lemmas,
+  Δ = +0.030, CI excludes 0) — no longer a `plane`-shaped anecdote. Several words
+  (`head`, `cell`, `part`, `bit`, `level`) even beat text-only clustering.
+- **Coverage was a real ceiling, and liftable cheaply.** The 1k→21k jump (12→96
+  testable words) is what turned a per-word curiosity into an aggregate result,
+  and needed only the ~1,100 anchor synsets the corpora actually touch (~81 GB),
+  not the full 1.3 TB. But coverage is not sufficient: fully-gold-covered words
+  are mixed (`plant`/`floor`/`head` strong; `yard`/`film`/`book` ≈ 0).
+- **The signal is realized by argmax, less so by clustering.** Extra coverage
+  sharpened nearest-anchor *assignment* far more than *profile clustering* (whose
+  null rose in step). Reading one named label off the profile exploits
+  class-specific structure that whole-vector k-means blurs.
+- **It is inert where it should be.** Abstract / non-visually-separable words sit
+  at chance — the anchor is not a generic "extra features help" artifact.
+- **It still does not beat a strong text model under naive fusion**, under either
+  inventory. With coverage no longer the bottleneck, the remaining causes are
+  (i) **granularity** — an *averaged* class prototype is a coarse "typical look,"
+  and cross-modal cosine is dominated by topic over fine sense; (ii)
+  **redundancy** — a strong instruction-tuned text embedder already captures most
+  of the structure; and (iii) the **fusion mechanism** itself — fixed-λ
+  concatenation wastes signal that argmax assignment extracts.
 
 For an introduction to multimodal WSI, this is the honest and useful result:
-**images are usable and informative for the right words**, and the failure of
-naive fusion is a precise motivation for better methods rather than a verdict
-against the idea.
+**images are usable and informative for a substantial, growing set of words** —
+demonstrably so once the visual inventory is adequate — and the remaining
+negative (naive fusion) is now pinned on the fusion mechanism rather than on a
+lack of visual coverage.
 
 ---
 
 ## 8. Limitations
 
-- **Small samples.** 3–25 visual lemmas per corpus; aggregate CIs are wide.
-  Per-lemma findings are the more trustworthy evidence.
-- **Visual inventory.** ImageNet-1k is narrow; a larger synset-grounded image
-  set (e.g. ImageNet-21k) would populate `multi_visual` far better.
+- **Sample size, now partly addressed.** Under ImageNet-1k the visual pools were
+  tiny (3–25 lemmas); the 21k expansion raised them to 10–99, which is what let
+  SemCor reach significance. DWUG/SemEval-2010/2013 pools (15/20/10) still give
+  wide CIs, so their positive point estimates are suggestive, not conclusive.
+- **Visual inventory — improved, not solved.** Targeted 21k covers ~96 testable
+  words, but 216 wanted synsets are absent from winter21, and 21k *tail* classes
+  are noisier and smaller (some < 32 images) than the curated 1k. Coverage is now
+  broad but uneven in quality.
 - **Coarse prototypes.** Mean of 32 images per class discards intra-class
   variation; a usage-conditioned or exemplar retrieval scheme may carry finer
   sense signal.
@@ -365,8 +419,12 @@ against the idea.
    (available for DWUG via cluster glosses) → embed the gloss text → compare, a
    route that needs no WordNet and may carry sharper sense signal.
 3. **Richer / usage-conditioned visual anchors** instead of averaged class
-   prototypes; larger visual inventories (ImageNet-21k) for coverage.
-4. **Learned fusion** (gating, attention) rather than fixed concatenation.
+   prototypes. (Inventory coverage is largely handled: the targeted ImageNet-21k
+   fetch already lifts testable words 12→96; the next gain is prototype
+   *quality*, not more classes.)
+4. **Learned fusion** (gating, attention) rather than fixed concatenation — §6.4
+   isolates the failure to the fusion mechanism, so this is now the highest-value
+   change for the fusion result specifically.
 5. **Extend to verbs / other languages**, and to diachronic sense-change
    detection (DWUG's native task), for which the periods are currently pooled.
 
@@ -384,6 +442,13 @@ make dwug-fetch semeval2013-fetch semeval2010-fetch      # download the corpora
 CORPUS=dwug_en bash run.sh                               # or semcor / semeval2013 / semeval2010
 ```
 
+For the ImageNet-21k condition, only the anchor synsets a corpus needs are
+required: run `select_targets` against the 21k synset list (`image-net.org`
+synset API), collect the resulting `anchor_wnids`, download just those
+`winter21_whole/<wnid>.tar` tarballs into class folders, merge with ILSVRC under
+one root, and point `IMAGENET_ROOT` at it. This is ~81 GB (1,115 classes), not
+the full ~1.3 TB.
+
 `run.sh` runs the full pipeline end-to-end and writes
 `results/<run>/report.md` for oracle-K and unknown-K. Each stage is also a
 `make` target and a plain `python -m src.<stage>` module. Key knobs live in
@@ -394,5 +459,7 @@ instruction template, λ grid, seeds).
 → `index_imagenet` → `select_targets` → `embed_imagenet` (image prototypes) +
 `embed_contexts` (text + label prototypes) → `cluster` → `evaluate` → `report`.
 
-The eight reports discussed here are under
-`results/{semcor,dwug_en,semeval2013,semeval2010}_{oracle,unknown}_k/report.md`.
+The sixteen reports discussed here are under
+`results/{semcor,dwug_en,semeval2013,semeval2010}_{oracle,unknown}_k/report.md`
+(ImageNet-1k) and the same with a `_21k` suffix
+(`results/<corpus>_21k_{oracle,unknown}_k/report.md`).
