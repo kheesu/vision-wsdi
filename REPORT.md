@@ -28,8 +28,9 @@ clustering. We report three questions, in order of importance to the thesis:
    handful of words (*plane* ARI 0.70 vs. 0.02 null); after expanding the visual
    inventory to the needed **ImageNet-21k** classes (12 → 96 testable words),
    assignment beats its permuted null **on every corpus**, and on the
-   best-powered benchmark (SemCor, 99 visual lemmas) the effect is
-   **statistically significant** (Δ = +0.030, 95% CI [+0.007, +0.056]).
+   multi_visual scope the effect is **statistically significant on two**
+   (SemCor Δ = +0.046, 95% CI [+0.010, +0.084], 64 words; SemEval-2013 Δ = +0.164,
+   [+0.026, +0.339], 6 words).
 2. **Is the visual signal real at all?** — does the anchor profile *alone*
    cluster senses above a permuted-anchor null? **Answer: the signal is present**
    (e.g. *board* profile 0.58, *table* 0.47) even where hard assignment is
@@ -137,7 +138,9 @@ via sentence-transformers). One model produces both modalities:
   base (after PCA-64) and as the cross-modal anchor query (raw, in the shared
   space).
 - **Image prototype** `v_c`: 32 sampled ImageNet training images per class,
-  embedded and mean-pooled, then L2-normalised.
+  embedded and mean-pooled, then L2-normalised. These are **whole images — no
+  bounding-box crop** (see §8: the object covers only ~45% of a typical frame,
+  so the prototype encodes scene/background as well as the object).
 - **Label prototype**: the text embedding of the class *name* — a control (see
   below).
 
@@ -218,11 +221,17 @@ raises words whose *gold* senses are all anchorable from 0 to 12.
 
 Sixteen runs share one pipeline (Qwen encoder, target-aware instruction): 4
 corpora × {oracle-K, unknown-K} × {ImageNet-1k, ImageNet-21k}. The table below
-is the ImageNet-1k condition; §6.1 carries the 21k comparison. `anchor` =
-`image-profile-only`; `null` = `shuffled-profile-only`; `text` = `qwen`;
-`+img`/`+lbl` = fused image/label.
+is the ImageNet-1k condition; §6.1 carries the 21k comparison.
 
-| corpus (mode) | #vis | anchor | null | Δ_signal | text | +img | Δ_image | +lbl |
+**Column key — note these are the *profile-clustering* (Question 2) columns, not
+assignment.** `profile` = `image-profile-only` (cluster the anchor profile);
+`profile-null` = `shuffled-profile-only`; `Δ_signal` = their difference; `text` =
+`qwen`; `+img`/`+lbl` = fused image/label. The *assignment* comparison
+(`anchor-assignment` vs its null — the headline) is a **different** test and
+lives in §6.1; do not read these `profile`/`profile-null` columns as the
+assignment result.
+
+| corpus (mode) | #vis | profile | profile-null | Δ_signal | text | +img | Δ_image | +lbl |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | SemCor (oracle) | 25 | 0.069 | 0.065 | +0.004 | 0.402 | 0.320 | −0.082 | 0.298 |
 | SemCor (unknown) | 25 | 0.065 | 0.069 | −0.004 | 0.385 | 0.350 | −0.034 | 0.324 |
@@ -247,16 +256,21 @@ assignment is K-free), under both visual inventories:
 | SemEval-2010 | 2 — −0.032 / 0.018 | 14 — 0.103 / 0.084 |
 
 Under ImageNet-1k the evidence rests on a couple of words; under the 21k
-expansion **assignment beats its permuted null on all four corpora**, and the
-paired bootstrap over all visual lemmas gives the study's first significant
-aggregate:
+expansion **assignment beats its permuted null on all four corpora**. Scored on
+the **`multi_visual` lemmas** — the non-degenerate scope, since single-grounded-
+sense words are ARI-0 by construction and would only dilute the mean — the paired
+bootstrap gives the study's first significant aggregates:
 
-| corpus (21k) | n visual | Δ_assign | 95% CI | excludes 0 |
+| corpus (21k) | n multi_visual | Δ_assign (mv) | 95% CI | excludes 0 |
 |---|---:|---:|---|---|
-| **SemCor** | 99 | **+0.030** | [+0.007, +0.056] | **yes** |
-| SemEval-2013 | 10 | +0.099 | [+0.000, +0.216] | yes (marginal) |
-| DWUG EN | 15 | +0.074 | [−0.017, +0.182] | no |
-| SemEval-2010 | 20 | +0.013 | [−0.043, +0.082] | no |
+| **SemCor** | 64 | **+0.046** | [+0.010, +0.084] | **yes** |
+| **SemEval-2013** | 6 | **+0.164** | [+0.026, +0.339] | **yes** |
+| DWUG EN | 12 | +0.093 | [−0.017, +0.221] | no (n=12) |
+| SemEval-2010 | 14 | +0.019 | [−0.058, +0.115] | no |
+
+(Over *all* visual lemmas — including the single-sense zeros — the SemCor figure
+is a diluted but still-significant +0.030 [+0.007, +0.056]; we report the
+`multi_visual` scope as the honest effect size.)
 
 The effect also stops being a two-word anecdote. Words where assignment beats
 its null by > 0.15 (was: `plane`, `board`) now include, e.g.:
@@ -307,17 +321,25 @@ profile test itself: **at or near chance**.
 
 ### 6.3 Profile clustering, per lemma (selectivity check)
 
-The weak aggregate (§6.2) hides sharp per-word structure. For words that are
-*genuinely visually polysemous*, the anchor **alone** recovers senses far above
-its null, and this **replicates across clustering regimes**:
+The weak aggregate (§6.2) hides sharp per-word structure. It is **not** a
+two-word effect: under ImageNet-21k, ~22 `multi_visual` words cluster above their
+null (Δ > 0.10, oracle-K). For genuinely visually polysemous words, **clustering
+the profile alone** (`image-profile-only`) recovers senses far above its null,
+and this **replicates across clustering regimes** (ImageNet-21k, oracle / unknown-K):
 
-| word (corpus) | anchor-only ARI (oracle / unknown) | null (oracle / unknown) |
+| word (corpus) | profile-only ARI (oracle / unknown) | profile-null (oracle / unknown) |
 |---|---|---|
-| **`plane`** (DWUG) | **0.43 / 0.70** | 0.12 / 0.15 |
-| **`board`** (SemCor) | **0.66 / 0.66** | 0.44 / 0.44 |
+| **`head`** (SemCor) | **0.74 / 0.74** | 0.28 / 0.45 |
+| **`face`** (DWUG) | **0.41 / 0.41** | 0.07 / 0.07 |
+| **`cell`** (SemCor) | **0.77 / 0.77** | 0.55 / 0.54 |
+
+(others: `paper`, `officer`, `section`, `grain`, `body`, `house`, `field`, …).
+Note the clustering "winners" differ from the assignment winners (§6.1) — e.g.
+`head`/`face` cluster strongly, whereas `plane`/`cell` *assign* strongly — since
+argmax and whole-profile k-means read the same profile differently.
 
 Meanwhile the method does **not** hallucinate signal where there is none:
-abstract nouns (`market` anchor 0.00; `area`, `church`, `door` ≈ 0) sit at
+abstract nouns (`market` profile 0.00; `area`, `church`, `door` ≈ 0) sit at
 chance, and some nominally-visual words whose senses are not visually separable
 (`house`, `ball` in one regime) fall at or below their null. This selectivity —
 strong where senses are visually distinct, null where they are not — is the core
@@ -339,12 +361,71 @@ it is negative on all four corpora (−0.04 to −0.09). Two qualifications matt
   mechanism**, not to coverage — the same signal that yields a significant
   *assignment* result is wasted under fixed-λ concatenation.
 
+**Fusion-scaling sweep (SemCor @21k, multi_visual, oracle-K).** To rule out that
+the failure is a dimensionality/scaling artifact, we swept how the visual block
+is built and sized before concatenation — the profile `a_i`, and the *selected
+prototype* `v_{c*}` (argmax anchor) both hard and softmax-weighted — at three
+scalings, each with per-lemma λ tuning:
+
+| visual block | raw | PCA-32 img | full-4096 both |
+|---|--:|--:|--:|
+| profile `a_i` (= `qwen+image`) | 0.301 | — | — |
+| selected proto, argmax | 0.155 | 0.231 | 0.161 |
+| selected proto, softmax | 0.189 | 0.230 | 0.191 |
+| **text baseline** | **0.389** (PCA-64) / **0.399** (full-4096) | | |
+
+Every variant loses to text, and **best λ pins at the grid floor in every case**
+(the optimiser wants to *ignore* the visual block). Balancing dimensionality
+(PCA-32) reduces the harm but does not remove it. Two structural reasons, not
+scale: (i) the selected-prototype feature is **constant within each argmax
+group**, so concatenating it injects the *assignment* partition — whose
+standalone ARI is only ~0.08 — dragging the 0.39 text clustering toward it; and
+(ii) a z-scored block of `d` dims has norm ∝ √d, which swamps the unit-norm text
+unless λ→0. So the fusion failure is **robust to scaling** — it is the
+fixed-concatenation mechanism, and the fix is learned/gated fusion that trusts
+the visual block per-word (incidental notes: full-4096 text ≈ PCA-64 text, so
+PCA-64 costs ~nothing; softmax pooling consistently beats hard argmax).
+
 ### 6.5 Image vs. name
 
 On SemEval-2013 the **class name** (`+label` ≈ 0.42–0.43) helps more than the
 class *image* (`+img` ≈ 0.35–0.39) and more than text. A clean reminder that
 lexical grounding and visual grounding are different signals, and that for some
 words the *name* of the visual concept is the more useful cue.
+
+### 6.6 Does cropping to the object help? (bounding-box A/B)
+
+§8 notes the prototypes are whole images whose object fills only ~45% of the
+frame — so an obvious hypothesis is that the background is *noise* and cropping
+to the object would sharpen the anchor. We tested it directly on SemCor @1k: for
+each anchor class, take the **same 32 annotated images** and build two matched
+prototypes — the whole image vs. the image cropped to the union bounding box
+(object covers 52% of frame on average, so the crop removes ~48%). Only the crop
+differs; text embeddings, targets, and clustering are identical.
+
+**Cropping *hurt*, and sharply** (multi_visual assignment, oracle-K):
+
+| variant | assign | null | Δ |
+|---|---:|---:|---:|
+| whole image | 0.072 | 0.042 | **+0.030** |
+| cropped to bbox | 0.001 | 0.020 | **−0.019** |
+
+Per lemma, the two words carrying the whole-image signal lost it entirely:
+`board` 0.378 → 0.000, `light` 0.120 → 0.005 (the rest were ~0 either way).
+
+The most likely reading flips the initial intuition: **the surrounding scene is
+carrying sense-relevant signal, not just noise.** `board`'s anchors are `plank`
+vs. `dining_table` — in whole images they differ enormously by *scene* (workshop
+vs. dining room), and that scene correlates with the sense; cropped to the bare
+object, two flat wooden surfaces look *more* alike. So for word-sense work,
+image context appears to *disambiguate*.
+
+Caveats (this is suggestive, not conclusive): small n (only `board`/`light` had
+signal to lose); and crop-and-upscale **degrades** the image (resolution/framing
+shift) — confounded with context removal. The honest follow-up is to **mask or
+blur the background in place** (same framing/resolution) to separate "context
+helps" from "cropping degrades." This experiment is isolated in a standalone
+script (`build_crop_prototypes.py`); it did not modify the pipeline.
 
 ---
 
@@ -356,8 +437,9 @@ The picture is coherent across four benchmarks. The visual channel carries
 - **Visible anchors *can* label usages — at corpus scale.** Nearest-visible-anchor
   assignment is a grounded, inductive, human-inspectable sense labelling with no
   clustering. Under adequate visual coverage (21k) it beats its permuted null on
-  all four corpora and is **statistically significant on SemCor** (99 lemmas,
-  Δ = +0.030, CI excludes 0) — no longer a `plane`-shaped anecdote. Several words
+  all four corpora and is **statistically significant on two** (multi_visual
+  scope: SemCor Δ = +0.046 [+0.010, +0.084], 64 words; SemEval-2013 Δ = +0.164
+  [+0.026, +0.339], 6 words) — no longer a `plane`-shaped anecdote. Several words
   (`head`, `cell`, `part`, `bit`, `level`) even beat text-only clustering.
 - **Coverage was a real ceiling, and liftable cheaply.** The 1k→21k jump (12→96
   testable words) is what turned a per-word curiosity into an aggregate result,
@@ -373,7 +455,10 @@ The picture is coherent across four benchmarks. The visual channel carries
 - **It still does not beat a strong text model under naive fusion**, under either
   inventory. With coverage no longer the bottleneck, the remaining causes are
   (i) **granularity** — an *averaged* class prototype is a coarse "typical look,"
-  and cross-modal cosine is dominated by topic over fine sense; (ii)
+  and cross-modal cosine is dominated by topic over fine sense. (We initially
+  suspected the background — the object fills only ~45% of the frame, §8 — was
+  the culprit, but cropping it away *hurt* assignment, §6.6: scene context
+  appears sense-informative, so "coarse" is not simply "too much background."); (ii)
   **redundancy** — a strong instruction-tuned text embedder already captures most
   of the structure; and (iii) the **fusion mechanism** itself — fixed-λ
   concatenation wastes signal that argmax assignment extracts.
@@ -396,9 +481,15 @@ lack of visual coverage.
   words, but 216 wanted synsets are absent from winter21, and 21k *tail* classes
   are noisier and smaller (some < 32 images) than the curated 1k. Coverage is now
   broad but uneven in quality.
-- **Coarse prototypes.** Mean of 32 images per class discards intra-class
-  variation; a usage-conditioned or exemplar retrieval scheme may carry finer
-  sense signal.
+- **Prototypes are whole-image (object ≈ 45% of frame), and that context turns
+  out to matter.** We embed the full JPEG, no crop. Measured on 1,200 annotated
+  ILSVRC images, the object bbox covers a **median of only ~45%** of the frame
+  (66% < 60%; 46% < 40%), and 32 such images are averaged — so a prototype is a
+  coarse, scene-heavy "typical look." We expected this background to be dilutive
+  noise, but the bbox-crop A/B (§6.6) **refuted that**: removing it *hurt*
+  assignment. So the weakness is subtler — the prototype conflates object and
+  scene, and both appear to carry sense-relevant signal; simply stripping the
+  scene is not the fix.
 - **Naive fusion.** Simple normalised concatenation with a scalar λ; learned or
   gated fusion is untested.
 - **Scope.** English, nouns only. The WordNet→ImageNet bridge is English-specific
@@ -418,10 +509,15 @@ lack of visual coverage.
 2. **Gloss-based anchors.** Ground each *induced* cluster by its definition/gloss
    (available for DWUG via cluster glosses) → embed the gloss text → compare, a
    route that needs no WordNet and may carry sharper sense signal.
-3. **Richer / usage-conditioned visual anchors** instead of averaged class
-   prototypes. (Inventory coverage is largely handled: the targeted ImageNet-21k
-   fetch already lifts testable words 12→96; the next gain is prototype
-   *quality*, not more classes.)
+3. **Better prototypes — but *not* naive cropping.** The bbox-crop A/B (§6.6)
+   showed that removing the background *hurt*, so object-only prototypes are out.
+   The disentangling experiment is a **background mask/blur in place** (same
+   framing and resolution, context removed) to test whether scene context is
+   genuinely informative or the crop merely degraded the image. Beyond that,
+   **usage-conditioned or exemplar** anchors — retrieve/weight the class images
+   most like the usage — rather than one scene-heavy averaged prototype.
+   (Inventory *coverage* is largely handled by the 21k fetch; the next gain is
+   prototype *quality*, not more classes.)
 4. **Learned fusion** (gating, attention) rather than fixed concatenation — §6.4
    isolates the failure to the fusion mechanism, so this is now the highest-value
    change for the fusion result specifically.
