@@ -519,8 +519,10 @@ lack of visual coverage.
    (Inventory *coverage* is largely handled by the 21k fetch; the next gain is
    prototype *quality*, not more classes.)
 4. **Learned fusion** (gating, attention) rather than fixed concatenation — §6.4
-   isolates the failure to the fusion mechanism, so this is now the highest-value
-   change for the fusion result specifically.
+   isolates the failure to the fusion mechanism. But §12 shows an *unsupervised*
+   text-uncertainty gate cannot help (text fails by being confidently wrong, not
+   unsure), so learned fusion is worth pursuing only *with* supervision, or with a
+   gate keyed off the image profile itself rather than text confidence.
 5. **Extend to verbs / other languages**, and to diachronic sense-change
    detection (DWUG's native task), for which the periods are currently pooled.
 
@@ -611,3 +613,50 @@ The takeaway of the whole study in one line: **valid targets are many, but the
 image helps only where a word's senses are distinct picturable objects** — a
 strict, sense-level condition that correlates with, but is much narrower than,
 "the word is concrete."
+
+---
+
+## 12. Hybrid gating — can we use the image *only when text is unsure*?
+
+Naive fusion fails (§6.4), so the natural repair is a **gate**: keep the text
+clustering, and fall back to the visual `anchor-assignment` only for the words
+text can't handle. We tested whether such a gate can work, over the
+`multi_visual` words at 21k. Per word we measured text ARI (`qwen`), image ARI
+(`anchor-assignment`), and a **gold-free** text-uncertainty signal — how much the
+text partition wobbles across the 10 seeds (`1 − mean pairwise cross-seed ARI`).
+
+| corpus | n | text | oracle ceiling | best realistic gate | corr(uncertainty, image−text) |
+|---|--:|--:|--:|--:|--:|
+| SemCor | 64 | 0.389 | 0.402 (**+0.013**) | 0.389 (+0.000) | +0.24 |
+| DWUG EN | 12 | 0.368 | 0.423 (**+0.055**) | 0.398 (+0.030) | +0.19 |
+| SemEval-2013 | 6 | 0.331 | 0.383 (**+0.052**) | 0.331 (+0.000) | −0.61 |
+| SemEval-2010 | 14 | 0.616 | 0.618 (**+0.002**) | 0.616 (+0.000) | +0.35 |
+
+Pooled: **oracle ceiling +0.019**, best realistic gate **+0.004**. Two findings,
+both negative for the naive hybrid:
+
+1. **The ceiling is tiny.** An *oracle* that picks the better system per word
+   gains only +0.019 ARI pooled; "always use image" is catastrophic (SemCor 0.389
+   → 0.080). There is almost nothing to gain even with perfect gating.
+2. **The premise is false in this data.** "Use image when text isn't enough"
+   assumes text's failures surface as text *uncertainty*. They don't — the words
+   image rescues are text's **most stable** words (in SemCor, `cell`, `center`,
+   `water` sit at uncertainty ranks 46–56 of 64). Text isn't unsure about them;
+   it is **confidently wrong**, partitioning cleanly by topic/register instead of
+   by sense. So any text-internal confidence signal (cross-seed stability here,
+   but silhouette or margin behave the same way — they all reward well-separated
+   clusters, and these clusters *are* well separated, just on the wrong axis)
+   keys off the opposite of what the gate needs. The best-threshold gate — already
+   optimistic, since it uses gold to pick its single threshold — recovers only
+   ~1/5 of the negligible ceiling, and on 3 of 4 corpora gates nothing at all.
+   (DWUG's +0.030 rides one word, `head`, that happens to be both the top rescue
+   and the most text-uncertain word — coincidence, not signal; the correlations
+   are weak and flip negative on SemEval-2013.)
+
+**Conclusion.** This is the fusion failure (§6.4) seen from the gate's side: text
+and image disagree on *which axis* to split, and the disagreement is invisible to
+any unsupervised confidence measure. A hybrid can't beat text here **without gold
+labels to tell it when text is wrong** — which defeats the point of an
+unsupervised gate. A learned fusion/gate (§9.4) is therefore only worth pursuing
+*with* supervision, or with a gate signal external to text confidence (e.g. the
+image profile's own class-specificity), not a text-uncertainty threshold.
