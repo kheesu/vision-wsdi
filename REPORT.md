@@ -747,4 +747,60 @@ trust the grounding. This converts §6.7's *post-hoc* works/fails table into an
 *a-priori*, gold-free filter — "the detector selects ~1/3 of grounded words, and
 on those the image channel beats null; on the rest it correctly declines" — which
 is the defensible way to scope a multimodal WSI claim. (Analysis and both signals:
-`experiments/cluster_label/groundability.py`.)
+`experiments/cluster_label/groundability.py`; the behavioral signal is recomputed
+from the saved partitions in `experiments/agreement_gate/agreement_gate.py`.)
+
+---
+
+## 13. Text–image agreement: a stronger gate, and the limit of gold-free gating
+
+*(Re-analyses of the saved 21k oracle-K artifacts, 96 `multi_visual` words;
+scripts and full tables: `experiments/agreement_gate/`.)*
+
+**A second gold-free signal beats §12's.** For each word, take the ARI between
+the *text* partition and the *anchor-assignment* partition (mean over text
+seeds) — no gold involved; the strong text clustering acts as a pseudo-gold that
+certifies the image channel per word. It predicts the outcome Δ = assignment −
+null at Spearman **+0.53** (vs −0.40 for §12's max-share signal), and stacking
+it on the behavioral gate roughly doubles precision and effect size:
+
+| gate | keep | precision | recall | mean Δ kept | mean Δ rejected |
+|---|--:|--:|--:|--:|--:|
+| §12 behavioral (`share < 0.80`) | 35/96 | 0.43 | 0.68 | +0.134 | +0.010 |
+| + agreement (`ARI(text,assign) > 0.10`) | 17/96 | **0.71** | 0.55 | **+0.260** | +0.011 |
+
+**But rescues are structurally invisible — to every gold-free signal.** The gate
+captures only **2 of the 13** words where image beats text (`head`, `part`,
+`bit`, `center`, …): where image beats text, text is *wrong*, so agreement is
+low there by construction — and raw *dis*agreement doesn't find them either
+(the spread-but-disagreeing quadrant sits at Δ +0.01; most disagreement is the
+image splitting a wrong axis). Together with §11 this closes the question from
+both sides: text's failures are invisible to text-internal confidence, to the
+image system's own behavior, and to cross-system disagreement. **Gold-free
+certification of the visual channel is possible; gold-free rescue detection is
+not.** The channel's defensible unsupervised role is a certified
+grounding/naming layer, not a text-fixer.
+
+**Two audits of §12/§6.7.** (i) The behavioral signal is partly *mechanical*: a
+collapsed assignment is a near-one-cluster partition whose ARI ≈ 0 by
+construction; within the 35 non-collapsed words its correlation with Δ falls to
+−0.27. It remains operationally valid, but the agreement signal carries the
+real predictive content. (ii) The shuffled-assignment null is *inflated* on
+some words (`cell`@SemEval-2010 0.43, `house` 0.29, `board` 0.28): shuffled
+prototypes also collapse, and a collapsed partition can align with a skewed
+gold. Aggregates stand (skew correlation +0.08), but §6.7's strongly negative
+Δ rows (`board`, `house`, `ball`) mostly measure a lucky null, not images
+actively misleading.
+
+**Label-assignment control (missing from §6.1) — the image matters, and
+image+name fuses free.** On the cached SemEval-2010 @21k (14 words; text
+0.616, assignment null ≈ 0.084): image-prototype assignment 0.107 vs
+class-*name* assignment **0.079** — the visual content adds over the WordNet
+class identity. Per-sense z-calibration (§9 future-work 1) is a trade, not a
+win — it rescues collapse-prone words (`body` 0.01→0.32) but destroys strong
+ones (`cell` 0.93→0.24), suggesting calibration should be *triggered by* §12's
+collapse statistic rather than applied globally. And a 0.5/0.5 **score-level**
+image+label fusion reaches **0.148**, beating both channels (`body` 0.01→0.62,
+`cell` stays 0.93) — name and image anchors are complementary at the assignment
+level even though feature-level fusion fails (§6.4). Replicating the control on
+SemCor (the headline corpus) needs one re-embed and is the obvious next run.
