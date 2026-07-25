@@ -696,3 +696,55 @@ labels to tell it when text is wrong** — which defeats the point of an
 unsupervised gate. A learned fusion/gate (§9.4) is therefore only worth pursuing
 *with* supervision, or with a gate signal external to text confidence (e.g. the
 image profile's own class-specificity), not a text-uncertainty threshold.
+
+---
+
+## 12. A gold-free groundability front-end
+
+§6.7 showed that "has an ImageNet anchor" (`multi_visual`) is necessary but far
+from sufficient — 74 of 96 grounded words still fail because their *senses look
+alike as images*. §11 showed we cannot recover the good words by asking where
+*text* is unsure. The constructive question is different and answerable: **can we
+decide, a priori and without gold labels, which words the visual channel should
+even be applied to?** We test two gold-free signals against the per-word outcome
+Δ = anchor-assignment ARI − null, over the 96 `multi_visual` words at 21k.
+
+| signal | what it asks | Spearman(·, Δ) | |
+|---|---|--:|:--|
+| **geometric** — mean pairwise cosine between a word's sense-anchor prototypes | *are the anchor prototypes far apart?* | +0.08 | useless |
+| **behavioral** — share of usages the assignment routes to its single most-used anchor | *does the assignment spread across senses, or collapse onto one?* | −0.40 | usable |
+
+**The intuitive geometric signal fails.** The words whose sense-anchors are *most*
+separated in embedding space — `twist`, `means`, `foundation`, `heart`,
+`activity`, `thing` (pairwise cosine 0.04–0.13) — mostly **fail**. Abstract senses
+get mapped to *spuriously distant but meaningless* anchor classes: the prototypes
+differ, but they do not track how the usages look. "Are the prototypes different?"
+is the wrong question.
+
+**The behavioral signal works.** Words that work collapse onto one anchor 67 % of
+the time; words that fail, 87 %. A gold-free rule — keep a word only if its
+assignment does *not* collapse (`max share < 0.80`):
+
+| rule | words kept | precision | recall | mean Δ kept | mean Δ rejected |
+|---|--:|--:|--:|--:|--:|
+| `max share < 0.80` | 35 / 96 | 0.43 | 0.68 | **+0.134** | **+0.010** |
+
+The kept words average Δ **+0.134** — above the +0.10 "clearly works" bar — while
+the rejected words sit at **+0.010**, i.e. at null. A single behavioral
+self-diagnostic cleanly separates the words worth grounding from the rest.
+
+**Why this succeeds where §11 failed.** The hybrid gate needed to detect where
+*text* is wrong — impossible, because text is confidently wrong. This gate asks a
+question about the *image* system's own behavior on the word — *does its
+assignment collapse?* — which is directly observable, a priori, from the anchors
+and usages alone. It is exactly the "gate signal external to text confidence"
+that §11's conclusion pointed to.
+
+**Design implication.** The honest front-end for the visual channel is
+**behavioral, not geometric**: run the anchor assignment; if it collapses onto a
+single sense, declare the word non-groundable and fall back to text; otherwise
+trust the grounding. This converts §6.7's *post-hoc* works/fails table into an
+*a-priori*, gold-free filter — "the detector selects ~1/3 of grounded words, and
+on those the image channel beats null; on the rest it correctly declines" — which
+is the defensible way to scope a multimodal WSI claim. (Analysis and both signals:
+`experiments/cluster_label/groundability.py`.)
