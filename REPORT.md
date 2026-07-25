@@ -427,6 +427,94 @@ blur the background in place** (same framing/resolution) to separate "context
 helps" from "cropping degrades." This experiment is isolated in a standalone
 script (`build_crop_prototypes.py`); it did not modify the pipeline.
 
+### 6.7 Which words does this work for? (full inventory)
+
+The effect is strongly **word-dependent**, so here is the whole picture rather
+than selected examples. Of the target nouns retained by the corpus thresholds,
+those with ≥ 2 visually-grounded senses (`multi_visual`) are the
+assignment-testable set: **96 word–corpus pairs under ImageNet-21k.** We classify
+each by Δ = assignment ARI − permuted-null ARI, using a **conservative** cut — a
+word only counts as working when it *clearly* beats its null, and a merely
+tiny-positive Δ is treated as no reliable signal, not as partial success:
+
+| outcome | Δ | count | share |
+|---|---|--:|--:|
+| **clearly works** | ≥ +0.10 | **22** | 23 % |
+| marginal | +0.02 to +0.10 | 14 | 15 % |
+| **no signal** | < +0.02 | 60 | 62 % |
+
+The split is uneven across corpora — most testable words live in SemCor, and the
+"works" rate is broadly similar everywhere:
+
+| corpus | testable | works | marginal | no signal |
+|---|--:|--:|--:|--:|
+| SemCor | 64 | 13 | 11 | 40 |
+| DWUG EN | 12 | 4 | 2 | 6 |
+| SemEval-2013 | 6 | 3 | 0 | 3 |
+| SemEval-2010 | 14 | 2 | 1 | 11 |
+
+#### Works — visually distinct senses (Δ ≥ 0.10)
+
+| word (corpus) | assign | null | Δ | anchored sense split |
+|---|--:|--:|--:|---|
+| `plant` (SemCor) | 0.67 | 0.07 | +0.60 | flora vs. factory |
+| `course` (SemCor) | 0.65 | 0.08 | +0.58 | class / racecourse / path |
+| `paper` (SemEval-13) | 0.59 | 0.06 | +0.53 | newspaper vs. sheet of paper |
+| `head` (DWUG) | 0.68 | 0.17 | +0.51 | body-part / promontory / drum-head / tape head |
+| `cell` (SemCor) | 0.58 | 0.07 | +0.51 | biological / prison / phone |
+| `cell` (SemEval-10) | 0.93 | 0.43 | +0.50 | biological / prison / phone |
+| `plane` (DWUG) | 0.68 | 0.18 | +0.50 | aircraft vs. carpenter's plane |
+| `head` (SemCor) | 0.36 | 0.04 | +0.32 | as above |
+| `ground` (SemCor) | 0.39 | 0.09 | +0.30 | earth / land / undercoat |
+| `part` (SemEval-13) | 0.43 | 0.13 | +0.29 | portion vs. region |
+| `floor` (SemCor) | 0.36 | 0.07 | +0.29 | storey / ground / sea-floor |
+| `body` (SemCor) | 0.35 | 0.08 | +0.27 | organism / torso / corpus |
+| `officer` (SemEval-10) | 0.32 | 0.09 | +0.24 | military / police / official |
+| `bit` (DWUG) | 0.26 | 0.04 | +0.22 | drill bit vs. horse's bit |
+| `officer` (SemCor) | 0.26 | 0.05 | +0.21 | as above |
+| `level` (SemCor) | 0.21 | 0.00 | +0.21 | storey vs. horizontal surface |
+| `control` (SemEval-13) | 0.18 | −0.00 | +0.18 | control panel vs. restraint |
+| `section` (SemCor) | 0.27 | 0.11 | +0.16 | segment vs. district |
+| `bar` (DWUG) | 0.40 | 0.25 | +0.15 | rod / pub / rifle |
+| `paper` (SemCor) | 0.16 | 0.04 | +0.12 | newspaper vs. sheet |
+| `center` (SemCor) | 0.22 | 0.10 | +0.12 | middle vs. facility |
+| `man` (SemCor) | 0.10 | −0.01 | +0.11 | human / manservant / soldier (barely — see below) |
+
+The 14 **marginal** words (Δ 0.02–0.10) include `water`, `face`, `community`,
+`element`, `part` (DWUG), `picture`, `space`, `side`, `book` — a positive nudge,
+but not enough to rely on.
+
+#### No signal — and the three reasons why (Δ < +0.02)
+
+| word (corpus) | assign | null | Δ | why |
+|---|--:|--:|--:|---|
+| `house` (SemEval-10) | 0.05 | 0.29 | −0.25 | senses look alike (building vs. theatre) |
+| `board` (SemCor) | 0.03 | 0.28 | −0.24 | 8 anchors, mostly flat panels — visually collapsed |
+| `ball` (DWUG) | −0.03 | 0.20 | −0.23 | sport-ball / dance / bullet — "a party" isn't picturable |
+| `area` (SemCor) | −0.05 | 0.09 | −0.14 | abstract region senses |
+| `earth` (SemCor) | −0.07 | 0.05 | −0.13 | soil vs. planet, but text already strong |
+| `yard` (SemCor) | 0.00 | 0.10 | −0.10 | length-unit sense isn't an object; text = 1.00 |
+| `body` (SemEval-10) | 0.01 | 0.11 | −0.10 | organism / torso / corpus all look like people |
+| `land` (DWUG) | 0.10 | 0.16 | −0.06 | terrain vs. "to land" — the verb sense isn't a scene |
+| `chip`, `material`, `study`, `edge`, `gas`, `case`, `line`, `form`, … | ~0 | small + | ≤ 0 | abstract / non-separable senses |
+
+Three failure modes recur: **(a) senses that look alike** — `man`'s senses are
+all people, `board`'s are all flat panels, `house`/`body`'s are all buildings or
+bodies (probed directly: `man`'s usages route to a single generic-person anchor
+**97 %** of the time, and `child`'s and `girl`'s anchor prototypes are
+*identical*, cos = 1.00); **(b) a physical word whose sense split is abstract** —
+`yard` (a unit of length), `film` (a movie), `ball` (a party); **(c) text already
+saturates** — `yard`, `board`, `body` have `qwen` ≈ 1.00, leaving no headroom.
+
+Conversely, the words that work share one property: **their senses denote
+different kinds of object** (flora/factory, aircraft/tool, cell/prison/phone).
+That, not lemma concreteness, is the operative condition — several concrete nouns
+fail, and even words with *every* gold sense anchored are mixed (`plant`, `floor`,
+`head`, `officer` work; `yard`, `film`, `book`, `child`, `girl` do not). Note also
+the **corpus dependence** (`body`, `part`, `officer` land differently in different
+corpora): the same lemma's usable senses depend on which senses each corpus
+actually attests.
+
 ---
 
 ## 7. Discussion
@@ -519,7 +607,7 @@ lack of visual coverage.
    (Inventory *coverage* is largely handled by the 21k fetch; the next gain is
    prototype *quality*, not more classes.)
 4. **Learned fusion** (gating, attention) rather than fixed concatenation — §6.4
-   isolates the failure to the fusion mechanism. But §12 shows an *unsupervised*
+   isolates the failure to the fusion mechanism. But §11 shows an *unsupervised*
    text-uncertainty gate cannot help (text fails by being confidently wrong, not
    unsure), so learned fusion is worth pursuing only *with* supervision, or with a
    gate keyed off the image profile itself rather than text confidence.
@@ -564,59 +652,7 @@ The sixteen reports discussed here are under
 
 ---
 
-## 11. Appendix — per-word breakdown
-
-Every `multi_visual` word (≥ 2 visually-grounded senses; nouns) is a *valid
-target*. Under ImageNet-21k, image-anchor assignment splits them cleanly into
-words it **works** on (Δ = assign − null > 0.10), **marginal** (0.02–0.10), and
-**no** (≤ 0.02). The split is not about frequency — it is about whether a word's
-senses are *distinct picturable objects*.
-
-| corpus | valid targets (multi_visual) | works | marginal | no |
-|---|--:|--:|--:|--:|
-| SemCor | 64 | 13 | 11 | 40 |
-| DWUG EN | 12 | 4 | 2 | 6 |
-| SemEval-2013 | 6 | 3 | 0 | 3 |
-| SemEval-2010 | 14 | 2 | 1 | 11 |
-
-**Works** (assign ARI / null — the senses are visibly different things):
-
-| word (corpus) | assign | null | sense split |
-|---|--:|--:|---|
-| `cell` (SE-2010) | 0.93 | 0.43 | phone / biological cell / prison cell |
-| `head` (DWUG) | 0.68 | 0.17 | body part / promontory / drum-head / tape head |
-| `plane` (DWUG) | 0.68 | 0.18 | aircraft / flat surface / tool |
-| `plant` (SemCor) | 0.67 | 0.07 | flora / factory |
-| `course` (SemCor) | 0.65 | 0.08 | class / path / racecourse |
-| `paper` (SE-2013) | 0.59 | 0.06 | newspaper / writing material |
-| `cell` (SemCor) | 0.58 | 0.07 | phone / biology / prison |
-| `part` (SE-2013) | 0.43 | 0.13 | portion / region |
-| `bar` (DWUG) | 0.40 | 0.25 | rod / pub / rifle |
-| `ground`,`floor`,`body`,`officer`,`level`,`section`,`center`,`bit` (DWUG) | 0.21–0.39 | 0.04–0.17 | concrete, distinct senses |
-
-**Doesn't work** — three failure modes (with examples):
-
-1. **Abstract / non-picturable senses** (the bulk): `matter`, `means`, `state`,
-   `action`, `situation`, `form`, `system`, `property`, `activity`, `place`,
-   `point`, `case`, `thing` — all ≈ 0. There is nothing to see.
-2. **Senses that are the same *kind* of object.** `man` (0.10, barely above
-   chance — every sense is a person; 97 % of usages collapse to one "person"
-   anchor), `face`, `body`; and single-anchor person words `child` ≡ `girl`
-   (their anchors are visually identical, cos = 1.00). Concrete, but not
-   *visually distinguishable*.
-3. **The split isn't visual / text already saturates.** `yard` (length-unit vs.
-   enclosure — text already scores 1.0), `film` (movie vs. thin layer), `board`
-   (a fine gold split its images don't track). Also fine-grained near-synonymous
-   clusters (`twist`, `grain`, `edge`) resist visual separation.
-
-The takeaway of the whole study in one line: **valid targets are many, but the
-image helps only where a word's senses are distinct picturable objects** — a
-strict, sense-level condition that correlates with, but is much narrower than,
-"the word is concrete."
-
----
-
-## 12. Hybrid gating — can we use the image *only when text is unsure*?
+## 11. Hybrid gating — can we use the image *only when text is unsure*?
 
 Naive fusion fails (§6.4), so the natural repair is a **gate**: keep the text
 clustering, and fall back to the visual `anchor-assignment` only for the words
