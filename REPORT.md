@@ -559,3 +559,55 @@ The sixteen reports discussed here are under
 `results/{semcor,dwug_en,semeval2013,semeval2010}_{oracle,unknown}_k/report.md`
 (ImageNet-1k) and the same with a `_21k` suffix
 (`results/<corpus>_21k_{oracle,unknown}_k/report.md`).
+
+---
+
+## 11. Appendix — per-word breakdown
+
+Every `multi_visual` word (≥ 2 visually-grounded senses; nouns) is a *valid
+target*. Under ImageNet-21k, image-anchor assignment splits them cleanly into
+words it **works** on (Δ = assign − null > 0.10), **marginal** (0.02–0.10), and
+**no** (≤ 0.02). The split is not about frequency — it is about whether a word's
+senses are *distinct picturable objects*.
+
+| corpus | valid targets (multi_visual) | works | marginal | no |
+|---|--:|--:|--:|--:|
+| SemCor | 64 | 13 | 11 | 40 |
+| DWUG EN | 12 | 4 | 2 | 6 |
+| SemEval-2013 | 6 | 3 | 0 | 3 |
+| SemEval-2010 | 14 | 2 | 1 | 11 |
+
+**Works** (assign ARI / null — the senses are visibly different things):
+
+| word (corpus) | assign | null | sense split |
+|---|--:|--:|---|
+| `cell` (SE-2010) | 0.93 | 0.43 | phone / biological cell / prison cell |
+| `head` (DWUG) | 0.68 | 0.17 | body part / promontory / drum-head / tape head |
+| `plane` (DWUG) | 0.68 | 0.18 | aircraft / flat surface / tool |
+| `plant` (SemCor) | 0.67 | 0.07 | flora / factory |
+| `course` (SemCor) | 0.65 | 0.08 | class / path / racecourse |
+| `paper` (SE-2013) | 0.59 | 0.06 | newspaper / writing material |
+| `cell` (SemCor) | 0.58 | 0.07 | phone / biology / prison |
+| `part` (SE-2013) | 0.43 | 0.13 | portion / region |
+| `bar` (DWUG) | 0.40 | 0.25 | rod / pub / rifle |
+| `ground`,`floor`,`body`,`officer`,`level`,`section`,`center`,`bit` (DWUG) | 0.21–0.39 | 0.04–0.17 | concrete, distinct senses |
+
+**Doesn't work** — three failure modes (with examples):
+
+1. **Abstract / non-picturable senses** (the bulk): `matter`, `means`, `state`,
+   `action`, `situation`, `form`, `system`, `property`, `activity`, `place`,
+   `point`, `case`, `thing` — all ≈ 0. There is nothing to see.
+2. **Senses that are the same *kind* of object.** `man` (0.10, barely above
+   chance — every sense is a person; 97 % of usages collapse to one "person"
+   anchor), `face`, `body`; and single-anchor person words `child` ≡ `girl`
+   (their anchors are visually identical, cos = 1.00). Concrete, but not
+   *visually distinguishable*.
+3. **The split isn't visual / text already saturates.** `yard` (length-unit vs.
+   enclosure — text already scores 1.0), `film` (movie vs. thin layer), `board`
+   (a fine gold split its images don't track). Also fine-grained near-synonymous
+   clusters (`twist`, `grain`, `edge`) resist visual separation.
+
+The takeaway of the whole study in one line: **valid targets are many, but the
+image helps only where a word's senses are distinct picturable objects** — a
+strict, sense-level condition that correlates with, but is much narrower than,
+"the word is concrete."
