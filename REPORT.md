@@ -303,6 +303,12 @@ Bolded rows are cases where the visual assignment **outperforms text-only
 clustering** (`head`, `cell`, `part`; also `bit`, `level`) — the first direct
 instances of the visual channel beating the text baseline on any measure.
 
+What the rule does, qualitatively — usages of `plane` and `cell` grouped by
+their nearest ImageNet anchor image, with no sense labels and no text
+supervision:
+
+![One word, several pictures: usages of "plane" and "cell" grouped by their nearest ImageNet anchor image](figure_word_senses.png)
+
 Three takeaways. **(a)** Nearest-visible-anchor assignment — a named,
 inspectable, inductive sense labeling with no clustering — works, and with
 adequate coverage the effect is corpus-level, not anecdotal. **(b)** It remains
@@ -519,8 +525,9 @@ the scene correlates with the sense; cropped to the bare object, two flat
 wooden surfaces look *more* alike. Caveats: small n (only two words had signal
 to lose), and crop-and-upscale degrades the image, which is confounded with
 context removal — the clean follow-up is masking/blurring the background *in
-place*. (Standalone script `build_crop_prototypes.py`; the main pipeline is
-untouched.)
+place*. (The one-off script for this A/B was not retained; its outputs are
+archived in `results/semcor_1k_{whole,crop}bbox_oracle_k/` and
+`cache/proto_{whole,crop}.pt`. The main pipeline is untouched.)
 
 ---
 
@@ -846,10 +853,22 @@ committed CSVs):
 
 | section | script(s) |
 |---|---|
-| §10 crop A/B | `build_crop_prototypes.py` (standalone) |
+| §10 crop A/B | one-off script, not retained (outputs in `results/semcor_1k_*bbox_oracle_k/`) |
 | §11.1 hybrid gate | `experiments/hybrid/hybrid_gate.py` |
 | §11.2 geometric/behavioral gates | `experiments/cluster_label/groundability.py` |
 | §11.2 audits, §11.3–11.4 agreement gate | `experiments/agreement_gate/agreement_gate.py` |
 | §12 cluster-then-label | `experiments/cluster_label/cluster_then_label.py` |
 | §13 label control / calibration / fusion | `experiments/agreement_gate/label_assignment.py` |
 | §14 gloss anchors | `experiments/gloss/eval_gloss_dwug.py`, `eval_gloss_image_dwug.py` |
+
+**Figures.** `make figures` (or `python -m experiments.figures.<name>`
+individually) regenerates the poster figures into `figures/`, which is
+git-ignored — regeneration needs the run outputs in `results/`, the embedding
+caches in `cache/`, and (for the two photo-tile figures) ImageNet-21k on disk;
+set `IMAGENET_DIR` to its train split. The four generators in
+`experiments/figures/`: `figure_q1` (the §6 assignment-vs-null deltas across
+all four corpora, with paired-bootstrap CIs), `figure_anchor_plane` (the
+three-panel showcase of the `cell` anchor plane), `figure_plane_simple` (the
+same plane as a plain scatter), and `figure_anchor_space` (usages and anchors
+in one mean-centered 2-D layout). The qualitative figure embedded in §6
+(`figure_word_senses.png`) is committed directly.

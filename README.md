@@ -12,6 +12,13 @@ WordNet synsets (SemCor senses are directly compatible with ImageNet WNIDs).
 Optimal transport and full distributional alignment are still out of scope until
 this result is positive.
 
+**The full write-up — method, results, audits — is [REPORT.md](REPORT.md).**
+The headline: label each usage by its nearest *visible* anchor — no clustering,
+no K — and the result beats a permuted-photo control on all four corpora, with
+sense labels that come out named and inspectable:
+
+![One word, several pictures: usages of "plane" and "cell" grouped by their nearest ImageNet anchor image, with no sense labels and no text supervision](figure_word_senses.png)
+
 ## Corpora
 
 The gold sense labels come from one of four interchangeable, English corpora,
@@ -119,7 +126,16 @@ src/{index_imagenet,select_targets}.py
 src/{embed_imagenet,embed_contexts,construct_features}.py
 src/{cluster,evaluate,report}.py
 data/  cache/  results/   generated artifacts (git-ignored)
+experiments/              follow-up experiments (each with RESULTS.md) + figure scripts
 ```
+
+## Figures
+
+`make figures` regenerates the poster figures into `figures/` (git-ignored).
+The generators live in `experiments/figures/`; they read the pipeline outputs
+in `results/` and `cache/`, and the two photo-tile figures additionally sample
+ImageNet-21k — point `IMAGENET_DIR` at its train split. The qualitative figure
+above (`figure_word_senses.png`) is committed directly.
 
 ## Go/no-go
 
@@ -129,3 +145,11 @@ zero, `qwen+image > qwen+label`, a majority of multi-visual lemmas improve, the
 shuffled control shows no comparable gain, and no single lemma dominates the
 aggregate improvement. `src/report.py` evaluates these and writes the verdict to
 `results/<run>/report.md`.
+
+**Outcome** (details in [REPORT.md](REPORT.md)): the fusion criterion was not
+met — naive `qwen+image` fusion does not beat the text baseline. The pilot's
+positive result sits one level down: nearest-visible-anchor *assignment*
+carries real signal on all four corpora (REPORT §6), the effect is strongly
+word-dependent (§9), and the reliable words can be identified without gold
+labels (§11–12). The constructive endpoint is a grounding-and-naming layer on
+top of text clustering, not a fusion feature.
