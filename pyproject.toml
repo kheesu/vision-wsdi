@@ -34,5 +34,9 @@ addopts = "-q"
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 
+[tool.ruff.lint.per-file-ignores]
+# Figure captions: each source line is one rendered line of poster text.
+"experiments/figures/*.py" = ["E501"]
+
 [tool.ruff]
 line-length = 100

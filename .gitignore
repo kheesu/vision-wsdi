@@ -28,4 +28,4 @@ box_audit.json
 .ruff_cache/
 
 # Generated figures (regenerate with `make figures`; requires ImageNet-21k locally)
-figures/
+/figures/

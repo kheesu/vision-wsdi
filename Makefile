@@ -1,5 +1,5 @@
 .PHONY: setup lint test audit data data-semcor data-dwug_en data-semeval2013 data-semeval2010 \
-        dwug-fetch semeval2013-fetch semeval2010-fetch prototypes contexts cluster evaluate report pilot clean
+        dwug-fetch semeval2013-fetch semeval2010-fetch prototypes contexts cluster evaluate report pilot figures clean
 
 CONFIG ?= configs/pilot.yaml
 RUN    ?= results/oracle_k
@@ -107,6 +107,15 @@ report:
 
 pilot: audit data prototypes contexts cluster evaluate report
 
+# Poster figures. Outputs land in figures/ (gitignored). figure_anchor_plane
+# and figure_anchor_space sample photo tiles from ImageNet-21k; point
+# IMAGENET_DIR at the train split (default /cldata/ImageNet-merged21k/train).
+figures:
+	$(PY) -m experiments.figures.figure_q1
+	$(PY) -m experiments.figures.figure_anchor_plane
+	$(PY) -m experiments.figures.figure_anchor_space
+	$(PY) -m experiments.figures.figure_plane_simple
+
 clean:
-	rm -rf results/oracle_k results/unknown_k __pycache__ src/__pycache__ src/pilotlib/__pycache__
+	rm -rf results/*_oracle_k results/*_unknown_k __pycache__ src/__pycache__ src/pilotlib/__pycache__
 	find . -name '*.pyc' -delete
